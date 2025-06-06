@@ -8,6 +8,15 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2025-03-10",
 	"compatibility_flags": ["nodejs_compat"],
+	"vars": {
+		"PLANDAY_APP_ID": "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "PLANDAY_TOKENS",
+			"id": "YOUR_KV_NAMESPACE_ID"
+		}
+	],
 	"migrations": [
 		{
 			"new_sqlite_classes": ["MyMCP"],

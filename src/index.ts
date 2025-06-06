@@ -137,7 +137,7 @@ export class MyMCP extends McpAgent {
 					'Content-Type': 'application/x-www-form-urlencoded',
 				},
 				body: new URLSearchParams({
-					client_id: env.PLANDAY_APP_ID,
+					client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
 					grant_type: 'refresh_token',
 					refresh_token: refreshToken
 				})
@@ -154,7 +154,7 @@ export class MyMCP extends McpAgent {
 			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
 				headers: {
 					'Authorization': `Bearer ${accessToken}`,
-					'X-ClientId': env.PLANDAY_APP_ID
+					'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
 				}
 			});
 
@@ -203,7 +203,7 @@ export class MyMCP extends McpAgent {
 					'Content-Type': 'application/x-www-form-urlencoded',
 				},
 				body: new URLSearchParams({
-					client_id: env.PLANDAY_APP_ID,
+					client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
 					grant_type: 'refresh_token',
 					refresh_token: tokenInfo.refreshToken
 				})
@@ -229,7 +229,7 @@ export class MyMCP extends McpAgent {
 		const response = await fetch(`https://openapi.planday.com/reports/v1/Shifts?startDate=${startDate}&endDate=${endDate}`, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
-				'X-ClientId': env.PLANDAY_APP_ID
+				'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
 			}
 		});
 
@@ -269,7 +269,7 @@ export class MyMCP extends McpAgent {
 		const response = await fetch(url, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
-				'X-ClientId': env.PLANDAY_APP_ID
+				'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
 			}
 		});
 

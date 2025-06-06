@@ -1,6 +1,6 @@
 // src/services/formatters.ts
 
-import type { PlandayShift, PlandayEmployee, PlandayDepartment } from './planday-api.js';
+import type { PlandayShift, PlandayEmployee, PlandayDepartment, PlandayAbsenceRecord } from './planday-api.js';
 
 export class DataFormatters {
   
@@ -86,6 +86,62 @@ export class DataFormatters {
     departments.forEach((department, index) => {
       result += `${index + 1}. ${department.name}\n`;
       result += `   🆔 ID: ${department.id}\n\n`;
+    });
+
+    return result;
+  }
+
+  static formatAbsenceRecords(
+    absenceRecords: PlandayAbsenceRecord[],
+    employeeMap: Map<number, string>,
+    filters?: string
+  ): string {
+    if (!absenceRecords || absenceRecords.length === 0) {
+      return filters 
+        ? `No absence records found with filters: ${filters}`
+        : 'No absence records found';
+    }
+
+    let result = filters 
+      ? `🏖️ Absence Records with filters (${absenceRecords.length} found):\n${filters}\n\n`
+      : `🏖️ All Absence Records (${absenceRecords.length} found):\n\n`;
+    
+    absenceRecords.forEach((record, index) => {
+      const employeeName = employeeMap.get(record.employeeId) || `Employee ID: ${record.employeeId}`;
+      const startDate = new Date(record.absencePeriod.start).toLocaleDateString();
+      const endDate = new Date(record.absencePeriod.end).toLocaleDateString();
+      
+      // Status emoji mapping
+      const statusEmoji = {
+        'Pending': '⏳',
+        'Approved': '✅', 
+        'Declined': '❌',
+        'Cancelled': '🚫'
+      }[record.status] || '❓';
+
+      result += `${index + 1}. ${employeeName}\n`;
+      result += `   🆔 Record ID: ${record.id}\n`;
+      result += `   ${statusEmoji} Status: ${record.status}\n`;
+      result += `   📅 Period: ${startDate} - ${endDate}\n`;
+      
+      if (record.note) {
+        result += `   📝 Note: ${record.note}\n`;
+      }
+      
+      // Show registration details
+      if (record.registrations && record.registrations.length > 0) {
+        result += `   📋 Registrations (${record.registrations.length}):\n`;
+        record.registrations.forEach((reg, regIndex) => {
+          const regDate = new Date(reg.date).toLocaleDateString();
+          result += `      ${regIndex + 1}. ${regDate} (${reg.time.start} - ${reg.time.end})\n`;
+          if (reg.account.costs && reg.account.costs.length > 0) {
+            const cost = reg.account.costs[0];
+            result += `         💰 Cost: ${cost.value} ${cost.unit.type}\n`;
+          }
+        });
+      }
+      
+      result += '\n';
     });
 
     return result;

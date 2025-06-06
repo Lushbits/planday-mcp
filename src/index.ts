@@ -9,11 +9,6 @@ interface PlandayTokens {
 	expiresAt?: string;
 }
 
-interface Env {
-	PLANDAY_TOKENS: KVNamespace;
-	PLANDAY_APP_ID: string;
-}
-
 // Define our Planday MCP agent
 export class MyMCP extends McpAgent {
 	server = new McpServer({
@@ -124,7 +119,7 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		// Debug tool - test environment access
+		// Debug tool - test session access
 		this.server.tool(
 			"debug-env",
 			{},
@@ -156,41 +151,53 @@ export class MyMCP extends McpAgent {
 	}
 
 	private async authenticatePlanday(refreshToken: string): Promise<{success: boolean, portalName?: string, error?: string}> {
-    try {
-        // Just test token exchange first
-        const tokenResponse = await fetch('https://id.planday.com/connect/token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
-                grant_type: 'refresh_token',
-                refresh_token: refreshToken
-            })
-        });
-
-        if (!tokenResponse.ok) {
-            return { success: false, error: `Token exchange failed: ${tokenResponse.status}` };
-        }
-
-        return { success: true, portalName: "Token exchange successful - skipped portal API for now" };
-    } catch (error) {
-        return { success: false, error: `Exception: ${error instanceof Error ? error.message : 'Unknown error'}` };
-    }
-}
-	private async getValidAccessToken(env: Env): Promise<string | null> {
-		const sessionId = "default-session";
-		
 		try {
-			const storedData = await env.PLANDAY_TOKENS.get(sessionId);
-			if (!storedData) return null;
+			// Test token exchange
+			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
+					grant_type: 'refresh_token',
+					refresh_token: refreshToken
+				})
+			});
 
-			const tokenInfo: PlandayTokens = JSON.parse(storedData);
+			if (!tokenResponse.ok) {
+				return { success: false, error: `Token exchange failed: ${tokenResponse.status}` };
+			}
+
+			const tokenData = await tokenResponse.json();
+
+			// Store session data in globalThis
+			// @ts-ignore
+			globalThis.plandaySession = {
+				refreshToken: refreshToken,
+				accessToken: tokenData.access_token,
+				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString(),
+				portalId: "authenticated"
+			};
+
+			return { success: true, portalName: "Token exchange successful - session stored in memory" };
+		} catch (error) {
+			return { success: false, error: `Exception: ${error instanceof Error ? error.message : 'Unknown error'}` };
+		}
+	}
+
+	private async getValidAccessToken(): Promise<string | null> {
+		try {
+			// @ts-ignore - Get session from globalThis
+			const sessionData: PlandayTokens | undefined = globalThis.plandaySession;
+			
+			if (!sessionData || !sessionData.refreshToken) {
+				return null;
+			}
 			
 			// Check if token is still valid (with 5 minute buffer)
-			if (tokenInfo.expiresAt && new Date(tokenInfo.expiresAt).getTime() > Date.now() + 300000) {
-				return tokenInfo.accessToken || null;
+			if (sessionData.expiresAt && new Date(sessionData.expiresAt).getTime() > Date.now() + 300000) {
+				return sessionData.accessToken || null;
 			}
 
 			// Refresh the token
@@ -202,7 +209,7 @@ export class MyMCP extends McpAgent {
 				body: new URLSearchParams({
 					client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
 					grant_type: 'refresh_token',
-					refresh_token: tokenInfo.refreshToken
+					refresh_token: sessionData.refreshToken
 				})
 			});
 
@@ -210,11 +217,12 @@ export class MyMCP extends McpAgent {
 
 			const tokenData = await tokenResponse.json();
 			
-			// Update stored token
-			tokenInfo.accessToken = tokenData.access_token;
-			tokenInfo.expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
+			// Update session data
+			sessionData.accessToken = tokenData.access_token;
+			sessionData.expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
 			
-			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
+			// @ts-ignore - Update global session
+			globalThis.plandaySession = sessionData;
 			
 			return tokenData.access_token;
 		} catch (error) {
@@ -222,7 +230,7 @@ export class MyMCP extends McpAgent {
 		}
 	}
 
-	private async fetchShifts(accessToken: string, startDate: string, endDate: string, env: Env): Promise<string> {
+	private async fetchShifts(accessToken: string, startDate: string, endDate: string): Promise<string> {
 		const response = await fetch(`https://openapi.planday.com/reports/v1/Shifts?startDate=${startDate}&endDate=${endDate}`, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
@@ -257,7 +265,7 @@ export class MyMCP extends McpAgent {
 		return result;
 	}
 
-	private async fetchEmployees(accessToken: string, department: string | undefined): Promise<string> {
+	private async fetchEmployees(accessToken: string, department?: string): Promise<string> {
 		let url = 'https://openapi.planday.com/hr/v1.0/employees';
 		if (department) {
 			url += `?department=${encodeURIComponent(department)}`;
@@ -306,7 +314,7 @@ export class MyMCP extends McpAgent {
 }
 
 export default {
-	fetch(request: Request, env: Env, ctx: ExecutionContext) {
+	fetch(request: Request, env: any, ctx: ExecutionContext) {
 		const url = new URL(request.url);
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
 			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);

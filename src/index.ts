@@ -143,8 +143,12 @@ export class MyMCP extends McpAgent {
 				})
 			});
 
+			console.log('Token response status:', tokenResponse.status);
+			const tokenData = await tokenResponse.json();
+			console.log('Token response data:', tokenData);
+
 			if (!tokenResponse.ok) {
-				return { success: false, error: `Invalid refresh token: ${tokenResponse.status}` };
+    				return { success: false, error: `Token exchange failed: ${tokenResponse.status} - ${JSON.stringify(tokenData)}` };
 			}
 
 			const tokenData = await tokenResponse.json();

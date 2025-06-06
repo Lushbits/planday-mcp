@@ -21,6 +21,14 @@ export class MyMCP extends McpAgent {
 		version: "1.0.0",
 	});
 
+	// Global storage for environment variables
+	private static globalEnv?: Env;
+
+	// Set the global environment (called from fetch handler)
+	static setEnvironment(env: Env) {
+		MyMCP.globalEnv = env;
+	}
+
 	async init() {
 		// Planday authentication tool - customers provide their refresh token
 		this.server.tool(
@@ -28,10 +36,10 @@ export class MyMCP extends McpAgent {
 			{ 
 				refreshToken: z.string().describe("Your Planday refresh token from API Access settings")
 			},
-			async ({ refreshToken }, { env }) => {
+			async ({ refreshToken }) => {
 				try {
 					// Validate and store the token
-					const result = await this.authenticatePlanday(refreshToken, env);
+					const result = await this.authenticatePlanday(refreshToken);
 					return {
 						content: [{
 							type: "text",
@@ -58,9 +66,9 @@ export class MyMCP extends McpAgent {
 				startDate: z.string().describe("Start date in YYYY-MM-DD format"),
 				endDate: z.string().describe("End date in YYYY-MM-DD format")
 			},
-			async ({ startDate, endDate }, { env }) => {
+			async ({ startDate, endDate }) => {
 				try {
-					const accessToken = await this.getValidAccessToken(env);
+					const accessToken = await this.getValidAccessToken();
 					if (!accessToken) {
 						return {
 							content: [{
@@ -70,7 +78,7 @@ export class MyMCP extends McpAgent {
 						};
 					}
 
-					const shifts = await this.fetchShifts(accessToken, startDate, endDate, env);
+					const shifts = await this.fetchShifts(accessToken, startDate, endDate);
 					return {
 						content: [{
 							type: "text",
@@ -94,9 +102,9 @@ export class MyMCP extends McpAgent {
 			{
 				department: z.string().optional().describe("Filter by department name (optional)")
 			},
-			async ({ department }, { env }) => {
+			async ({ department }) => {
 				try {
-					const accessToken = await this.getValidAccessToken(env);
+					const accessToken = await this.getValidAccessToken();
 					if (!accessToken) {
 						return {
 							content: [{
@@ -106,7 +114,7 @@ export class MyMCP extends McpAgent {
 						};
 					}
 
-					const employees = await this.fetchEmployees(accessToken, department, env);
+					const employees = await this.fetchEmployees(accessToken, department);
 					return {
 						content: [{
 							type: "text",
@@ -131,57 +139,50 @@ export class MyMCP extends McpAgent {
 			const sessionId = "default-session";
 
 			// Exchange refresh token for access token
-const tokenResponse = await fetch('https://id.planday.com/connect/token', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-        client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken
-    })
-});
+			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
+					grant_type: 'refresh_token',
+					refresh_token: refreshToken
+				})
+			});
 
-console.log('Token response status:', tokenResponse.status);
+			if (!tokenResponse.ok) {
+				return { success: false, error: `Invalid refresh token: ${tokenResponse.status}` };
+			}
 
-if (!tokenResponse.ok) {
-    const errorData = await tokenResponse.json();
-    console.log('Token error data:', errorData);
-    return { success: false, error: `Token exchange failed: ${tokenResponse.status} - ${JSON.stringify(errorData)}` };
-}
-
-const tokenData = await tokenResponse.json();
-console.log('Token response data:', tokenData);
-const accessToken = tokenData.access_token;
+			const tokenData = await tokenResponse.json();
+			const accessToken = tokenData.access_token;
 
 			// Get portal information
-			const portalResponse = await fetch('https://openapi.planday.com/portal/v1.0/info', {
-    headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
-    }
-});
+			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
+				}
+			});
+
+			if (!portalResponse.ok) {
+				return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
+			}
 
 			const portalData = await portalResponse.json();
-console.log('Portal response data:', portalData);
-
-if (!portalResponse.ok) {
-    return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
-}
-
-const portalId = portalData.data.id;
-const portalName = portalData.data.companyName || portalData.data.name;
+			const portalId = portalData.id;
+			const portalName = portalData.name;
 
 			// Store tokens for this session
-			// const tokenInfo: PlandayTokens = {
-			//	refreshToken,
-			//	accessToken,
-			//	portalId,
-			//	expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
-			// };
+			const tokenInfo: PlandayTokens = {
+				refreshToken,
+				accessToken,
+				portalId,
+				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
+			};
 
-			// await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
+			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
 
 			return { success: true, portalName };
 		} catch (error) {
@@ -267,7 +268,7 @@ const portalName = portalData.data.companyName || portalData.data.name;
 		return result;
 	}
 
-	private async fetchEmployees(accessToken: string, department: string | undefined, env: Env): Promise<string> {
+	private async fetchEmployees(accessToken: string, department: string | undefined): Promise<string> {
 		let url = 'https://openapi.planday.com/hr/v1/employees';
 		if (department) {
 			url += `?department=${encodeURIComponent(department)}`;
@@ -311,6 +312,9 @@ const portalName = portalData.data.companyName || portalData.data.name;
 
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		// Set global environment for all MCP operations
+		MyMCP.setEnvironment(env);
+		
 		const url = new URL(request.url);
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
 			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);

@@ -269,7 +269,7 @@ export class MyMCP extends McpAgent {
 	}
 
 	private async fetchEmployees(accessToken: string, department: string | undefined): Promise<string> {
-		let url = 'https://openapi.planday.com/hr/v1/employees';
+		let url = 'https://openapi.planday.com/hr/v1.0/employees';
 		if (department) {
 			url += `?department=${encodeURIComponent(department)}`;
 		}
@@ -295,14 +295,20 @@ export class MyMCP extends McpAgent {
 
 		// Format the employees data nicely
 		let result = department 
-			? `👥 Employees in ${department}:\n\n`
-			: `👥 All Employees:\n\n`;
+			? `👥 Employees in ${department} (${data.data.length} found):\n\n`
+			: `👥 All Employees (${data.data.length} found):\n\n`;
 		
 		data.data.forEach((employee: any, index: number) => {
 			result += `${index + 1}. ${employee.firstName} ${employee.lastName}\n`;
-			result += `   📧 ${employee.email || 'No email'}\n`;
-			result += `   🏢 ${employee.departmentName || 'No department'}\n`;
-			result += `   📋 ${employee.jobTitle || 'No job title'}\n`;
+			result += `   👤 ID: ${employee.id}\n`;
+			result += `   📧 Email: ${employee.email || 'No email'}\n`;
+			result += `   📱 Phone: ${employee.cellPhone || 'No phone'}\n`;
+			result += `   🏢 Primary Dept ID: ${employee.primaryDepartmentId || 'None'}\n`;
+			result += `   👤 Username: ${employee.userName || 'No username'}\n`;
+			result += `   📅 Hired: ${employee.hiredDate || 'Unknown'}\n`;
+			if (employee.deactivationDate) {
+				result += `   ❌ Deactivated: ${employee.deactivationDate}\n`;
+			}
 			result += '\n';
 		});
 

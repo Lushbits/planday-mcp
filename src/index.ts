@@ -131,6 +131,33 @@ export class MyMCP extends McpAgent {
 				}
 			}
 		);
+
+		// Debug tool - test environment access
+		this.server.tool(
+			"debug-env",
+			{},
+			async () => {
+				try {
+					return {
+						content: [{
+							type: "text",
+							text: `Debug info:
+- Global env exists: ${!!MyMCP.globalEnv}
+- APP_ID: ${MyMCP.globalEnv?.PLANDAY_APP_ID || 'undefined'}
+- KV exists: ${!!MyMCP.globalEnv?.PLANDAY_TOKENS}
+- Hardcoded APP_ID: 4b79b7b4-932a-4a3b-9400-dcc24ece299e`
+						}]
+					};
+				} catch (error) {
+					return {
+						content: [{
+							type: "text", 
+							text: `Debug error: ${error instanceof Error ? error.message : 'Unknown error'}`
+						}]
+					};
+				}
+			}
+		);
 	}
 
 	private async authenticatePlanday(refreshToken: string, env: Env): Promise<{success: boolean, portalName?: string, error?: string}> {

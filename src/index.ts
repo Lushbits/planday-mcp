@@ -1,13 +1,13 @@
-// src/index.ts - Complete clean version
+// src/index.ts - Corrected with .ts imports
 
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-// Import tool registration functions
-import { registerAuthTools } from './tools/auth-tools.js';
-import { registerEmployeeTools } from './tools/employee-tools.js';
-import { registerShiftTools } from './tools/shift-tools.js';
-import { registerAbsenceTools } from './tools/absence-tools.js';
+// Import tool registration functions - using .ts extensions
+import { registerAuthTools } from './tools/auth-tools.ts';
+import { registerEmployeeTools } from './tools/employee-tools.ts';
+import { registerShiftTools } from './tools/shift-tools.ts';
+import { registerAbsenceTools } from './tools/absence-tools.ts';
 
 // Define our Planday MCP agent
 export class MyMCP extends McpAgent {

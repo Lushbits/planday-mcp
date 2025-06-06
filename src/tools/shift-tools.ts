@@ -42,12 +42,14 @@ export function registerShiftTools(server: McpServer) {
         const employeeIds = [...new Set(shiftsResult.data.filter(shift => shift.employeeId).map(shift => shift.employeeId!))];
         const departmentIds = [...new Set(shiftsResult.data.map(shift => shift.departmentId).filter(Boolean) as number[])];
         const positionIds = [...new Set(shiftsResult.data.map(shift => shift.positionId).filter(Boolean) as number[])];
+        const shiftTypeIds = [...new Set(shiftsResult.data.map(shift => shift.shiftTypeId).filter(Boolean) as number[])];
 
         // Fetch lookup data in parallel
-        const [employeeMap, departmentMap, positionMap] = await Promise.all([
+        const [employeeMap, departmentMap, positionMap, shiftTypeMap] = await Promise.all([
           plandayAPI.getEmployeeMap(accessToken, employeeIds),
           plandayAPI.getDepartmentMap(accessToken, departmentIds),
-          plandayAPI.getPositions(accessToken, positionIds)
+          plandayAPI.getPositions(accessToken, positionIds),
+          plandayAPI.getShiftTypeMap(accessToken, shiftTypeIds)
         ]);
 
         // Format using the formatter
@@ -57,7 +59,8 @@ export function registerShiftTools(server: McpServer) {
           endDate, 
           employeeMap, 
           departmentMap, 
-          positionMap
+          positionMap,
+          shiftTypeMap
         );
 
         return {

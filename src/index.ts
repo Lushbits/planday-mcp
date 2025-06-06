@@ -163,13 +163,15 @@ const accessToken = tokenData.access_token;
     }
 });
 
-			if (!portalResponse.ok) {
-				return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
-			}
-
 			const portalData = await portalResponse.json();
-			const portalId = portalData.id;
-			const portalName = portalData.name;
+console.log('Portal response data:', portalData);
+
+if (!portalResponse.ok) {
+    return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
+}
+
+const portalId = portalData.data.id;
+const portalName = portalData.data.companyName || portalData.data.name;
 
 			// Store tokens for this session
 			// const tokenInfo: PlandayTokens = {

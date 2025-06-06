@@ -14,7 +14,7 @@
 	"kv_namespaces": [
 		{
 			"binding": "PLANDAY_TOKENS",
-			"id": "YOUR_KV_NAMESPACE_ID"
+			"id": "88b74e6f0d1e4425b0fc8b526051d5e3"
 		}
 	],
 	"migrations": [

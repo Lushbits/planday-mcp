@@ -172,14 +172,14 @@ const accessToken = tokenData.access_token;
 			const portalName = portalData.name;
 
 			// Store tokens for this session
-			const tokenInfo: PlandayTokens = {
-				refreshToken,
-				accessToken,
-				portalId,
-				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
-			};
+			// const tokenInfo: PlandayTokens = {
+			//	refreshToken,
+			//	accessToken,
+			//	portalId,
+			//	expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
+			// };
 
-			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
+			// await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
 
 			return { success: true, portalName };
 		} catch (error) {

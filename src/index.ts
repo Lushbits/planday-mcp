@@ -156,12 +156,12 @@ console.log('Token response data:', tokenData);
 const accessToken = tokenData.access_token;
 
 			// Get portal information
-			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
-				headers: {
-					'Authorization': `Bearer ${accessToken}`,
-					'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
-				}
-			});
+			const portalResponse = await fetch('https://openapi.planday.com/portal/v1.0/info', {
+    headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
+    }
+});
 
 			if (!portalResponse.ok) {
 				return { success: false, error: `Cannot access portal: ${portalResponse.status}` };

@@ -153,6 +153,44 @@ this.server.tool(
 	}
 );
 
+// NEW: Get employees using the new service layer
+this.server.tool(
+	"get-employees-v2",
+	{
+		department: z.string().optional().describe("Filter by department name (optional)")
+	},
+	async ({ department }) => {
+		try {
+			const accessToken = await authService.getValidAccessToken();
+			if (!accessToken) {
+				return {
+					content: [{
+						type: "text",
+						text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
+					}]
+				};
+			}
+
+			const result = await plandayAPI.getEmployees(accessToken, department);
+			const formatted = DataFormatters.formatEmployees(result.data, department);
+			
+			return {
+				content: [{
+					type: "text",
+					text: formatted
+				}]
+			};
+		} catch (error) {
+			return {
+				content: [{
+					type: "text",
+					text: DataFormatters.formatError("fetching employees", error)
+				}]
+			};
+		}
+	}
+);
+
 // NEW: Debug using new service
 this.server.tool(
 	"debug-session-v2",

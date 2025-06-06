@@ -1,4 +1,4 @@
-// src/index.ts - New clean modular version
+// src/index.ts - Complete clean version
 
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -27,21 +27,7 @@ export class MyMCP extends McpAgent {
 	}
 }
 
-// Export handler (same as before)
-export default {
-	fetch(request: Request, env: any, ctx: ExecutionContext) {
-		const url = new URL(request.url);
-		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
-		}
-		if (url.pathname === "/mcp") {
-			return MyMCP.serve("/mcp").fetch(request, env, ctx);
-		}
-		return new Response("Not found", { status: 404 });
-	},
-};
-
-// Export handler (same as before)
+// Export handler for Cloudflare Workers
 export default {
 	fetch(request: Request, env: any, ctx: ExecutionContext) {
 		const url = new URL(request.url);

@@ -23,9 +23,23 @@ export class MyMCP extends McpAgent {
 		registerShiftTools(this.server);
 		registerAbsenceTools(this.server);
 		
-		console.log("🚀 Planday MCP Server initialized with modular tools + absence management");
+		console.log("🚀 Planday MCP Server initialized with modular tools + absence management + shift types");
 	}
 }
+
+// Export handler (same as before)
+export default {
+	fetch(request: Request, env: any, ctx: ExecutionContext) {
+		const url = new URL(request.url);
+		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
+			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
+		}
+		if (url.pathname === "/mcp") {
+			return MyMCP.serve("/mcp").fetch(request, env, ctx);
+		}
+		return new Response("Not found", { status: 404 });
+	},
+};
 
 // Export handler (same as before)
 export default {

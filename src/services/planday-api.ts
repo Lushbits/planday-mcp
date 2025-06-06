@@ -33,6 +33,33 @@ export interface PlandayPosition {
   name: string;
 }
 
+export interface PlandayAbsenceRecord {
+  id: number;
+  employeeId: number;
+  status: "Pending" | "Approved" | "Declined" | "Cancelled";
+  note?: string;
+  absencePeriod: {
+    start: string;
+    end: string;
+  };
+  registrations: Array<{
+    date: string;
+    time: {
+      start: string;
+      end: string;
+    };
+    account: {
+      id: number;
+      costs: Array<{
+        value: number;
+        unit: {
+          type: string;
+        };
+      }>;
+    };
+  }>;
+}
+
 export interface PlandayAPIResponse<T> {
   data: T[];
   success: boolean;
@@ -178,6 +205,42 @@ export class PlandayAPIService {
     }
 
     return departmentMap;
+  }
+
+  // Absence Management API methods
+  async getAbsenceRecords(accessToken: string, params?: {
+    employeeId?: number;
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+  }): Promise<PlandayAPIResponse<PlandayAbsenceRecord>> {
+    let url = `${PlandayAPIService.BASE_URL}/absence/v1.0/absencerecords`;
+    
+    // Add query parameters if provided
+    const queryParams = new URLSearchParams();
+    if (params?.employeeId) queryParams.append('employeeId', params.employeeId.toString());
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.status) queryParams.append('status', params.status);
+    
+    if (queryParams.toString()) {
+      url += `?${queryParams.toString()}`;
+    }
+
+    const response = await fetch(url, {
+      headers: this.getHeaders(accessToken)
+    });
+    return this.handleResponse(response);
+  }
+
+  async getAbsenceRecord(accessToken: string, recordId: number): Promise<{ data: PlandayAbsenceRecord }> {
+    const response = await fetch(
+      `${PlandayAPIService.BASE_URL}/absence/v1.0/absencerecords/${recordId}`,
+      {
+        headers: this.getHeaders(accessToken)
+      }
+    );
+    return this.handleResponse(response);
   }
 
   // Raw API call for debugging

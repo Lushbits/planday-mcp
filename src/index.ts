@@ -2,74 +2,330 @@ import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-// Define our MCP agent with tools
+interface PlandayTokens {
+	refreshToken: string;
+	accessToken?: string;
+	portalId?: string;
+	expiresAt?: string;
+}
+
+interface Env {
+	PLANDAY_TOKENS: KVNamespace;
+	PLANDAY_APP_ID: string;
+}
+
+// Define our Planday MCP agent
 export class MyMCP extends McpAgent {
 	server = new McpServer({
-		name: "Authless Calculator",
+		name: "Planday Integration",
 		version: "1.0.0",
 	});
 
-	async init() {
-		// Simple addition tool
-		this.server.tool(
-			"add",
-			{ a: z.number(), b: z.number() },
-			async ({ a, b }) => ({
-				content: [{ type: "text", text: String(a + b) }],
-			})
-		);
+	private env?: Env;
+	private sessionId?: string;
 
-		// Calculator tool with multiple operations
+	async init(env?: Env, sessionId?: string) {
+		this.env = env;
+		this.sessionId = sessionId;
+
+		// Planday authentication tool - customers provide their refresh token
 		this.server.tool(
-			"calculate",
-			{
-				operation: z.enum(["add", "subtract", "multiply", "divide"]),
-				a: z.number(),
-				b: z.number(),
+			"authenticate-planday",
+			{ 
+				refreshToken: z.string().describe("Your Planday refresh token from API Access settings")
 			},
-			async ({ operation, a, b }) => {
-				let result: number;
-				switch (operation) {
-					case "add":
-						result = a + b;
-						break;
-					case "subtract":
-						result = a - b;
-						break;
-					case "multiply":
-						result = a * b;
-						break;
-					case "divide":
-						if (b === 0)
-							return {
-								content: [
-									{
-										type: "text",
-										text: "Error: Cannot divide by zero",
-									},
-								],
-							};
-						result = a / b;
-						break;
+			async ({ refreshToken }) => {
+				try {
+					// Validate and store the token
+					const result = await this.authenticatePlanday(refreshToken);
+					return {
+						content: [{
+							type: "text",
+							text: result.success 
+								? `✅ Successfully connected to Planday portal: ${result.portalName}`
+								: `❌ Authentication failed: ${result.error}`
+						}]
+					};
+				} catch (error) {
+					return {
+						content: [{
+							type: "text",
+							text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+						}]
+					};
 				}
-				return { content: [{ type: "text", text: String(result) }] };
 			}
 		);
+
+		// Get shifts tool
+		this.server.tool(
+			"get-shifts",
+			{
+				startDate: z.string().describe("Start date in YYYY-MM-DD format"),
+				endDate: z.string().describe("End date in YYYY-MM-DD format")
+			},
+			async ({ startDate, endDate }) => {
+				try {
+					const accessToken = await this.getValidAccessToken();
+					if (!accessToken) {
+						return {
+							content: [{
+								type: "text",
+								text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
+							}]
+						};
+					}
+
+					const shifts = await this.fetchShifts(accessToken, startDate, endDate);
+					return {
+						content: [{
+							type: "text",
+							text: shifts
+						}]
+					};
+				} catch (error) {
+					return {
+						content: [{
+							type: "text",
+							text: `❌ Error fetching shifts: ${error instanceof Error ? error.message : 'Unknown error'}`
+						}]
+					};
+				}
+			}
+		);
+
+		// Get employees tool
+		this.server.tool(
+			"get-employees",
+			{
+				department: z.string().optional().describe("Filter by department name (optional)")
+			},
+			async ({ department }) => {
+				try {
+					const accessToken = await this.getValidAccessToken();
+					if (!accessToken) {
+						return {
+							content: [{
+								type: "text",
+								text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
+							}]
+						};
+					}
+
+					const employees = await this.fetchEmployees(accessToken, department);
+					return {
+						content: [{
+							type: "text",
+							text: employees
+						}]
+					};
+				} catch (error) {
+					return {
+						content: [{
+							type: "text",
+							text: `❌ Error fetching employees: ${error instanceof Error ? error.message : 'Unknown error'}`
+						}]
+					};
+				}
+			}
+		);
+	}
+
+	private async authenticatePlanday(refreshToken: string): Promise<{success: boolean, portalName?: string, error?: string}> {
+		if (!this.env || !this.sessionId) {
+			throw new Error("Environment not initialized");
+		}
+
+		try {
+			// Exchange refresh token for access token
+			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					client_id: this.env.PLANDAY_APP_ID,
+					grant_type: 'refresh_token',
+					refresh_token: refreshToken
+				})
+			});
+
+			if (!tokenResponse.ok) {
+				return { success: false, error: `Invalid refresh token: ${tokenResponse.status}` };
+			}
+
+			const tokenData = await tokenResponse.json();
+			const accessToken = tokenData.access_token;
+
+			// Get portal information
+			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'X-ClientId': this.env.PLANDAY_APP_ID
+				}
+			});
+
+			if (!portalResponse.ok) {
+				return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
+			}
+
+			const portalData = await portalResponse.json();
+			const portalId = portalData.id;
+			const portalName = portalData.name;
+
+			// Store tokens for this session
+			const tokenInfo: PlandayTokens = {
+				refreshToken,
+				accessToken,
+				portalId,
+				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
+			};
+
+			await this.env.PLANDAY_TOKENS.put(this.sessionId, JSON.stringify(tokenInfo));
+
+			return { success: true, portalName };
+		} catch (error) {
+			return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+		}
+	}
+
+	private async getValidAccessToken(): Promise<string | null> {
+		if (!this.env || !this.sessionId) return null;
+
+		try {
+			const storedData = await this.env.PLANDAY_TOKENS.get(this.sessionId);
+			if (!storedData) return null;
+
+			const tokenInfo: PlandayTokens = JSON.parse(storedData);
+			
+			// Check if token is still valid (with 5 minute buffer)
+			if (tokenInfo.expiresAt && new Date(tokenInfo.expiresAt).getTime() > Date.now() + 300000) {
+				return tokenInfo.accessToken || null;
+			}
+
+			// Refresh the token
+			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					client_id: this.env.PLANDAY_APP_ID,
+					grant_type: 'refresh_token',
+					refresh_token: tokenInfo.refreshToken
+				})
+			});
+
+			if (!tokenResponse.ok) return null;
+
+			const tokenData = await tokenResponse.json();
+			
+			// Update stored token
+			tokenInfo.accessToken = tokenData.access_token;
+			tokenInfo.expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
+			
+			await this.env.PLANDAY_TOKENS.put(this.sessionId, JSON.stringify(tokenInfo));
+			
+			return tokenData.access_token;
+		} catch (error) {
+			return null;
+		}
+	}
+
+	private async fetchShifts(accessToken: string, startDate: string, endDate: string): Promise<string> {
+		const response = await fetch(`https://openapi.planday.com/reports/v1/Shifts?startDate=${startDate}&endDate=${endDate}`, {
+			headers: {
+				'Authorization': `Bearer ${accessToken}`,
+				'X-ClientId': this.env!.PLANDAY_APP_ID
+			}
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to fetch shifts: ${response.status} ${response.statusText}`);
+		}
+
+		const data = await response.json();
+		
+		if (!data.data || data.data.length === 0) {
+			return `No shifts found for the period ${startDate} to ${endDate}`;
+		}
+
+		// Format the shifts data nicely
+		let result = `📅 Shifts from ${startDate} to ${endDate}:\n\n`;
+		
+		data.data.forEach((shift: any, index: number) => {
+			result += `${index + 1}. ${shift.employeeName || 'Unknown Employee'}\n`;
+			result += `   📍 ${shift.departmentName || 'No department'}\n`;
+			result += `   ⏰ ${shift.startTime} - ${shift.endTime}\n`;
+			result += `   📊 Status: ${shift.status || 'Unknown'}\n`;
+			if (shift.breakMinutes) {
+				result += `   ☕ Break: ${shift.breakMinutes} minutes\n`;
+			}
+			result += '\n';
+		});
+
+		return result;
+	}
+
+	private async fetchEmployees(accessToken: string, department?: string): Promise<string> {
+		let url = 'https://openapi.planday.com/hr/v1/employees';
+		if (department) {
+			url += `?department=${encodeURIComponent(department)}`;
+		}
+
+		const response = await fetch(url, {
+			headers: {
+				'Authorization': `Bearer ${accessToken}`,
+				'X-ClientId': this.env!.PLANDAY_APP_ID
+			}
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to fetch employees: ${response.status} ${response.statusText}`);
+		}
+
+		const data = await response.json();
+		
+		if (!data.data || data.data.length === 0) {
+			return department 
+				? `No employees found in department: ${department}`
+				: 'No employees found';
+		}
+
+		// Format the employees data nicely
+		let result = department 
+			? `👥 Employees in ${department}:\n\n`
+			: `👥 All Employees:\n\n`;
+		
+		data.data.forEach((employee: any, index: number) => {
+			result += `${index + 1}. ${employee.firstName} ${employee.lastName}\n`;
+			result += `   📧 ${employee.email || 'No email'}\n`;
+			result += `   🏢 ${employee.departmentName || 'No department'}\n`;
+			result += `   📋 ${employee.jobTitle || 'No job title'}\n`;
+			result += '\n';
+		});
+
+		return result;
 	}
 }
 
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
 		const url = new URL(request.url);
-
+		
+		// Generate a simple session ID for this connection
+		const sessionId = request.headers.get('cf-ray') || Math.random().toString(36);
+		
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
+			const mcpInstance = new MyMCP();
+			mcpInstance.init(env, sessionId);
 			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
 		}
-
 		if (url.pathname === "/mcp") {
+			const mcpInstance = new MyMCP();
+			mcpInstance.init(env, sessionId);
 			return MyMCP.serve("/mcp").fetch(request, env, ctx);
 		}
-
 		return new Response("Not found", { status: 404 });
 	},
 };

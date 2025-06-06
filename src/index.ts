@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAuthTools } from './tools/auth-tools.js';
 import { registerEmployeeTools } from './tools/employee-tools.js';
 import { registerShiftTools } from './tools/shift-tools.js';
+import { registerAbsenceTools } from './tools/absence-tools.js';
 
 // Define our Planday MCP agent
 export class MyMCP extends McpAgent {
@@ -20,8 +21,9 @@ export class MyMCP extends McpAgent {
 		registerAuthTools(this.server);
 		registerEmployeeTools(this.server);
 		registerShiftTools(this.server);
+		registerAbsenceTools(this.server);
 		
-		console.log("🚀 Planday MCP Server initialized with modular tools");
+		console.log("🚀 Planday MCP Server initialized with modular tools + absence management");
 	}
 }
 

@@ -21,12 +21,11 @@ export class MyMCP extends McpAgent {
 		version: "1.0.0",
 	});
 
-	private env?: Env;
-	private sessionId?: string;
+	// Static storage for environment and session (simple approach)
+	private static currentEnv?: Env;
+	private static currentSessionId?: string;
 
-	async init(env?: Env, sessionId?: string) {
-		this.env = env;
-		this.sessionId = sessionId;
+	async init() {
 
 		// Planday authentication tool - customers provide their refresh token
 		this.server.tool(
@@ -37,7 +36,7 @@ export class MyMCP extends McpAgent {
 			async ({ refreshToken }) => {
 				try {
 					// Validate and store the token
-					const result = await this.authenticatePlanday(refreshToken);
+					const result = await MyMCP.authenticatePlanday(refreshToken);
 					return {
 						content: [{
 							type: "text",
@@ -66,7 +65,7 @@ export class MyMCP extends McpAgent {
 			},
 			async ({ startDate, endDate }) => {
 				try {
-					const accessToken = await this.getValidAccessToken();
+					const accessToken = await MyMCP.getValidAccessToken();
 					if (!accessToken) {
 						return {
 							content: [{
@@ -76,7 +75,7 @@ export class MyMCP extends McpAgent {
 						};
 					}
 
-					const shifts = await this.fetchShifts(accessToken, startDate, endDate);
+					const shifts = await MyMCP.fetchShifts(accessToken, startDate, endDate);
 					return {
 						content: [{
 							type: "text",
@@ -102,7 +101,7 @@ export class MyMCP extends McpAgent {
 			},
 			async ({ department }) => {
 				try {
-					const accessToken = await this.getValidAccessToken();
+					const accessToken = await MyMCP.getValidAccessToken();
 					if (!accessToken) {
 						return {
 							content: [{
@@ -112,7 +111,7 @@ export class MyMCP extends McpAgent {
 						};
 					}
 
-					const employees = await this.fetchEmployees(accessToken, department);
+					const employees = await MyMCP.fetchEmployees(accessToken, department);
 					return {
 						content: [{
 							type: "text",
@@ -131,8 +130,8 @@ export class MyMCP extends McpAgent {
 		);
 	}
 
-	private async authenticatePlanday(refreshToken: string): Promise<{success: boolean, portalName?: string, error?: string}> {
-		if (!this.env || !this.sessionId) {
+	private static async authenticatePlanday(refreshToken: string): Promise<{success: boolean, portalName?: string, error?: string}> {
+		if (!MyMCP.currentEnv || !MyMCP.currentSessionId) {
 			throw new Error("Environment not initialized");
 		}
 
@@ -144,7 +143,7 @@ export class MyMCP extends McpAgent {
 					'Content-Type': 'application/x-www-form-urlencoded',
 				},
 				body: new URLSearchParams({
-					client_id: this.env.PLANDAY_APP_ID,
+					client_id: MyMCP.currentEnv.PLANDAY_APP_ID,
 					grant_type: 'refresh_token',
 					refresh_token: refreshToken
 				})
@@ -161,7 +160,7 @@ export class MyMCP extends McpAgent {
 			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
 				headers: {
 					'Authorization': `Bearer ${accessToken}`,
-					'X-ClientId': this.env.PLANDAY_APP_ID
+					'X-ClientId': MyMCP.currentEnv.PLANDAY_APP_ID
 				}
 			});
 
@@ -181,7 +180,7 @@ export class MyMCP extends McpAgent {
 				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
 			};
 
-			await this.env.PLANDAY_TOKENS.put(this.sessionId, JSON.stringify(tokenInfo));
+			await MyMCP.currentEnv.PLANDAY_TOKENS.put(MyMCP.currentSessionId, JSON.stringify(tokenInfo));
 
 			return { success: true, portalName };
 		} catch (error) {
@@ -189,11 +188,11 @@ export class MyMCP extends McpAgent {
 		}
 	}
 
-	private async getValidAccessToken(): Promise<string | null> {
-		if (!this.env || !this.sessionId) return null;
+	private static async getValidAccessToken(): Promise<string | null> {
+		if (!MyMCP.currentEnv || !MyMCP.currentSessionId) return null;
 
 		try {
-			const storedData = await this.env.PLANDAY_TOKENS.get(this.sessionId);
+			const storedData = await MyMCP.currentEnv.PLANDAY_TOKENS.get(MyMCP.currentSessionId);
 			if (!storedData) return null;
 
 			const tokenInfo: PlandayTokens = JSON.parse(storedData);
@@ -210,7 +209,7 @@ export class MyMCP extends McpAgent {
 					'Content-Type': 'application/x-www-form-urlencoded',
 				},
 				body: new URLSearchParams({
-					client_id: this.env.PLANDAY_APP_ID,
+					client_id: MyMCP.currentEnv.PLANDAY_APP_ID,
 					grant_type: 'refresh_token',
 					refresh_token: tokenInfo.refreshToken
 				})
@@ -224,7 +223,7 @@ export class MyMCP extends McpAgent {
 			tokenInfo.accessToken = tokenData.access_token;
 			tokenInfo.expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
 			
-			await this.env.PLANDAY_TOKENS.put(this.sessionId, JSON.stringify(tokenInfo));
+			await MyMCP.currentEnv.PLANDAY_TOKENS.put(MyMCP.currentSessionId, JSON.stringify(tokenInfo));
 			
 			return tokenData.access_token;
 		} catch (error) {
@@ -232,11 +231,11 @@ export class MyMCP extends McpAgent {
 		}
 	}
 
-	private async fetchShifts(accessToken: string, startDate: string, endDate: string): Promise<string> {
+	private static async fetchShifts(accessToken: string, startDate: string, endDate: string): Promise<string> {
 		const response = await fetch(`https://openapi.planday.com/reports/v1/Shifts?startDate=${startDate}&endDate=${endDate}`, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
-				'X-ClientId': this.env!.PLANDAY_APP_ID
+				'X-ClientId': MyMCP.currentEnv!.PLANDAY_APP_ID
 			}
 		});
 
@@ -267,7 +266,7 @@ export class MyMCP extends McpAgent {
 		return result;
 	}
 
-	private async fetchEmployees(accessToken: string, department?: string): Promise<string> {
+	private static async fetchEmployees(accessToken: string, department?: string): Promise<string> {
 		let url = 'https://openapi.planday.com/hr/v1/employees';
 		if (department) {
 			url += `?department=${encodeURIComponent(department)}`;
@@ -276,7 +275,7 @@ export class MyMCP extends McpAgent {
 		const response = await fetch(url, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
-				'X-ClientId': this.env!.PLANDAY_APP_ID
+				'X-ClientId': MyMCP.currentEnv!.PLANDAY_APP_ID
 			}
 		});
 
@@ -311,19 +310,15 @@ export class MyMCP extends McpAgent {
 
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		// Set the environment and session for this request
+		MyMCP.currentEnv = env;
+		MyMCP.currentSessionId = request.headers.get('cf-ray') || Math.random().toString(36);
+		
 		const url = new URL(request.url);
-		
-		// Generate a simple session ID for this connection
-		const sessionId = request.headers.get('cf-ray') || Math.random().toString(36);
-		
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-			const mcpInstance = new MyMCP();
-			mcpInstance.init(env, sessionId);
 			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
 		}
 		if (url.pathname === "/mcp") {
-			const mcpInstance = new MyMCP();
-			mcpInstance.init(env, sessionId);
 			return MyMCP.serve("/mcp").fetch(request, env, ctx);
 		}
 		return new Response("Not found", { status: 404 });

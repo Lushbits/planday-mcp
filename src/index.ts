@@ -148,6 +148,70 @@ export class MyMCP extends McpAgent {
 				}
 			}
 		);
+
+		// Debug API responses - see raw data structure
+		this.server.tool(
+			"debug-api-response",
+			{
+				endpoint: z.enum(["shifts", "employees"]).describe("Which API endpoint to debug"),
+				startDate: z.string().optional().describe("For shifts: start date (YYYY-MM-DD)"),
+				endDate: z.string().optional().describe("For shifts: end date (YYYY-MM-DD)")
+			},
+			async ({ endpoint, startDate, endDate }) => {
+				try {
+					const accessToken = await this.getValidAccessToken();
+					if (!accessToken) {
+						return {
+							content: [{
+								type: "text",
+								text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
+							}]
+						};
+					}
+
+					let url: string;
+					if (endpoint === "shifts") {
+						const start = startDate || "2024-01-01";
+						const end = endDate || "2024-01-31";
+						url = `https://openapi.planday.com/scheduling/v1.0/shifts?from=${start}&to=${end}`;
+					} else {
+						url = 'https://openapi.planday.com/hr/v1.0/Employees';
+					}
+
+					const response = await fetch(url, {
+						headers: {
+							'Authorization': `Bearer ${accessToken}`,
+							'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
+						}
+					});
+
+					if (!response.ok) {
+						return {
+							content: [{
+								type: "text",
+								text: `❌ API Error: ${response.status} ${response.statusText}`
+							}]
+						};
+					}
+
+					const data = await response.json();
+					
+					return {
+						content: [{
+							type: "text",
+							text: `🔍 Raw API Response for ${endpoint}:\n\n${JSON.stringify(data, null, 2)}`
+						}]
+					};
+				} catch (error) {
+					return {
+						content: [{
+							type: "text",
+							text: `❌ Debug error: ${error instanceof Error ? error.message : 'Unknown error'}`
+						}]
+					};
+				}
+			}
+		);
 	}
 
 	private async authenticatePlanday(refreshToken: string): Promise<{success: boolean, portalName?: string, error?: string}> {

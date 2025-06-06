@@ -155,63 +155,30 @@ export class MyMCP extends McpAgent {
 		);
 	}
 
-	private async authenticatePlanday(refreshToken: string, env: Env): Promise<{success: boolean, portalName?: string, error?: string}> {
-		try {
-			// Use a fixed session key for simplicity (in real app, this would be user-specific)
-			const sessionId = "default-session";
+	private async authenticatePlanday(refreshToken: string): Promise<{success: boolean, portalName?: string, error?: string}> {
+    try {
+        // Just test token exchange first
+        const tokenResponse = await fetch('https://id.planday.com/connect/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
+                grant_type: 'refresh_token',
+                refresh_token: refreshToken
+            })
+        });
 
-			// Exchange refresh token for access token
-			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body: new URLSearchParams({
-					client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
-					grant_type: 'refresh_token',
-					refresh_token: refreshToken
-				})
-			});
+        if (!tokenResponse.ok) {
+            return { success: false, error: `Token exchange failed: ${tokenResponse.status}` };
+        }
 
-			if (!tokenResponse.ok) {
-				return { success: false, error: `Invalid refresh token: ${tokenResponse.status}` };
-			}
-
-			const tokenData = await tokenResponse.json();
-			const accessToken = tokenData.access_token;
-
-			// Get portal information
-			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
-				headers: {
-					'Authorization': `Bearer ${accessToken}`,
-					'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
-				}
-			});
-
-			if (!portalResponse.ok) {
-				return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
-			}
-
-			const portalData = await portalResponse.json();
-			const portalId = portalData.id;
-			const portalName = portalData.name;
-
-			// Store tokens for this session
-			const tokenInfo: PlandayTokens = {
-				refreshToken,
-				accessToken,
-				portalId,
-				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
-			};
-
-			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
-
-			return { success: true, portalName };
-		} catch (error) {
-			return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-		}
-	}
-
+        return { success: true, portalName: "Token exchange successful - skipped portal API for now" };
+    } catch (error) {
+        return { success: false, error: `Exception: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+}
 	private async getValidAccessToken(env: Env): Promise<string | null> {
 		const sessionId = "default-session";
 		

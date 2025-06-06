@@ -21,14 +21,6 @@ export class MyMCP extends McpAgent {
 		version: "1.0.0",
 	});
 
-	// Global storage for environment variables
-	private static globalEnv?: Env;
-
-	// Set the global environment (called from fetch handler)
-	static setEnvironment(env: Env) {
-		MyMCP.globalEnv = env;
-	}
-
 	async init() {
 		// Planday authentication tool - customers provide their refresh token
 		this.server.tool(
@@ -138,13 +130,16 @@ export class MyMCP extends McpAgent {
 			{},
 			async () => {
 				try {
+					// @ts-ignore - Check global session
+					const sessionExists = !!globalThis.plandaySession;
+					const sessionData = globalThis.plandaySession;
+					
 					return {
 						content: [{
 							type: "text",
 							text: `Debug info:
-- Global env exists: ${!!MyMCP.globalEnv}
-- APP_ID: ${MyMCP.globalEnv?.PLANDAY_APP_ID || 'undefined'}
-- KV exists: ${!!MyMCP.globalEnv?.PLANDAY_TOKENS}
+- Session exists: ${sessionExists}
+- Session data: ${sessionData ? JSON.stringify(sessionData, null, 2) : 'null'}
 - Hardcoded APP_ID: 4b79b7b4-932a-4a3b-9400-dcc24ece299e`
 						}]
 					};
@@ -345,14 +340,6 @@ export class MyMCP extends McpAgent {
 
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
-		console.log('=== FETCH HANDLER DEBUG ===');
-		console.log('env.PLANDAY_APP_ID:', env.PLANDAY_APP_ID);
-		console.log('env.PLANDAY_TOKENS exists:', !!env.PLANDAY_TOKENS);
-		
-		// Set global environment for all MCP operations
-		MyMCP.setEnvironment(env);
-		console.log('Global environment set');
-		
 		const url = new URL(request.url);
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
 			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);

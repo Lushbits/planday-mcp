@@ -7,7 +7,7 @@ import { plandayAPI } from '../services/planday-api.js';
 import { DataFormatters } from '../services/formatters.js';
 
 export function registerAbsenceTools(server: McpServer) {
-  // Get absence records tool
+  // Get absence records tool below
   server.tool(
     "get-absence-records",
     {

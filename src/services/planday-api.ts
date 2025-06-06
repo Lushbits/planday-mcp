@@ -5,6 +5,7 @@ export interface PlandayShift {
   employeeId?: number;
   departmentId?: number;
   positionId?: number;
+  shiftTypeId?: number;  // Added shift type reference
   startDateTime?: string;
   endDateTime?: string;
   status?: string;
@@ -58,6 +59,20 @@ export interface PlandayAbsenceRecord {
       }>;
     };
   }>;
+}
+
+export interface PlandayShiftType {
+  id: number;
+  name: string;
+  color?: string;
+  salaryCode?: string;
+  isActive: boolean;
+  payPercentage?: number;
+  payMonetary?: number;
+  allowsBreaks: boolean;
+  allowBooking: boolean;
+  paymentType: "Percentage" | "Monetary";
+  includeInSchedulePrint: boolean;
 }
 
 export interface PlandayAPIResponse<T> {
@@ -241,6 +256,38 @@ export class PlandayAPIService {
       }
     );
     return this.handleResponse(response);
+  }
+
+  // Shift Types API methods
+  async getShiftTypes(accessToken: string): Promise<PlandayAPIResponse<PlandayShiftType>> {
+    const response = await fetch(
+      `${PlandayAPIService.BASE_URL}/scheduling/v1.0/shifttypes`,
+      {
+        headers: this.getHeaders(accessToken)
+      }
+    );
+    return this.handleResponse(response);
+  }
+
+  async getShiftTypeMap(accessToken: string, shiftTypeIds: number[]): Promise<Map<number, string>> {
+    const shiftTypeMap = new Map<number, string>();
+    
+    if (shiftTypeIds.length === 0) return shiftTypeMap;
+
+    try {
+      const result = await this.getShiftTypes(accessToken);
+      if (result.data) {
+        result.data.forEach((shiftType) => {
+          if (shiftTypeIds.includes(shiftType.id)) {
+            shiftTypeMap.set(shiftType.id, shiftType.name || `Shift Type ${shiftType.id}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching shift type names:', error);
+    }
+
+    return shiftTypeMap;
   }
 
   // Raw API call for debugging

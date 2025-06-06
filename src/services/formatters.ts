@@ -1,6 +1,6 @@
 // src/services/formatters.ts
 
-import type { PlandayShift, PlandayEmployee, PlandayDepartment, PlandayAbsenceRecord } from './planday-api.js';
+import type { PlandayShift, PlandayEmployee, PlandayDepartment, PlandayAbsenceRecord, PlandayShiftType } from './planday-api.js';
 
 export class DataFormatters {
   
@@ -10,7 +10,8 @@ export class DataFormatters {
     endDate: string,
     employeeMap: Map<number, string>,
     departmentMap: Map<number, string>,
-    positionMap: Map<number, string>
+    positionMap: Map<number, string>,
+    shiftTypeMap?: Map<number, string>
   ): string {
     if (!shifts || shifts.length === 0) {
       return `No shifts found for the period ${startDate} to ${endDate}`;
@@ -33,6 +34,9 @@ export class DataFormatters {
       const positionName = shift.positionId ? 
         positionMap.get(shift.positionId) || `Position ID: ${shift.positionId}` : 
         null;
+      const shiftTypeName = shift.shiftTypeId && shiftTypeMap ? 
+        shiftTypeMap.get(shift.shiftTypeId) || `Shift Type ID: ${shift.shiftTypeId}` : 
+        null;
       
       result += `${index + 1}. ${employeeName}\n`;
       result += `   🏢 ${departmentName}\n`;
@@ -41,6 +45,9 @@ export class DataFormatters {
       result += `   📅 Date: ${shift.date}\n`;
       if (positionName) {
         result += `   💼 Position: ${positionName}\n`;
+      }
+      if (shiftTypeName) {
+        result += `   🏷️ Type: ${shiftTypeName}\n`;
       }
       result += '\n';
     });

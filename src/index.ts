@@ -312,7 +312,17 @@ export class MyMCP extends McpAgent {
 			return `No shifts found for the period ${startDate} to ${endDate}`;
 		}
 
-		// Format the shifts data with available fields
+		// Collect unique employee and department IDs to minimize API calls
+		const employeeIds = [...new Set(data.data.filter((shift: any) => shift.employeeId).map((shift: any) => shift.employeeId))];
+		const departmentIds = [...new Set(data.data.map((shift: any) => shift.departmentId).filter(Boolean))];
+
+		// Fetch employee and department data in parallel
+		const [employeeMap, departmentMap] = await Promise.all([
+			this.fetchEmployeeNames(accessToken, employeeIds),
+			this.fetchDepartmentNames(accessToken, departmentIds)
+		]);
+
+		// Format the shifts data with resolved names
 		let result = `📅 Shifts from ${startDate} to ${endDate} (${data.data.length} shifts found):\n\n`;
 		
 		data.data.forEach((shift: any, index: number) => {
@@ -320,9 +330,12 @@ export class MyMCP extends McpAgent {
 			const startTime = shift.startDateTime ? new Date(shift.startDateTime).toLocaleString() : 'No start time';
 			const endTime = shift.endDateTime ? new Date(shift.endDateTime).toLocaleString() : 'No end time';
 			
-			result += `${index + 1}. Shift ID: ${shift.id}\n`;
-			result += `   👤 Employee ID: ${shift.employeeId || 'Unassigned'}\n`;
-			result += `   🏢 Department ID: ${shift.departmentId || 'No department'}\n`;
+			// Get names from maps
+			const employeeName = shift.employeeId ? employeeMap.get(shift.employeeId) || `Employee ID: ${shift.employeeId}` : 'Unassigned';
+			const departmentName = shift.departmentId ? departmentMap.get(shift.departmentId) || `Department ID: ${shift.departmentId}` : 'No department';
+			
+			result += `${index + 1}. ${employeeName}\n`;
+			result += `   🏢 ${departmentName}\n`;
 			result += `   ⏰ ${startTime} - ${endTime}\n`;
 			result += `   📊 Status: ${shift.status || 'Unknown'}\n`;
 			result += `   📅 Date: ${shift.date}\n`;
@@ -333,6 +346,71 @@ export class MyMCP extends McpAgent {
 		});
 
 		return result;
+	}
+
+	// Helper method to fetch employee names by IDs
+	private async fetchEmployeeNames(accessToken: string, employeeIds: number[]): Promise<Map<number, string>> {
+		const employeeMap = new Map<number, string>();
+		
+		if (employeeIds.length === 0) return employeeMap;
+
+		try {
+			// Note: This might need to be done in batches if there are many employees
+			// For now, fetch all employees and filter
+			const response = await fetch('https://openapi.planday.com/hr/v1.0/Employees', {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
+				}
+			});
+
+			if (response.ok) {
+				const employeeData = await response.json();
+				if (employeeData.data) {
+					employeeData.data.forEach((employee: any) => {
+						if (employeeIds.includes(employee.id)) {
+							const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || `Employee ${employee.id}`;
+							employeeMap.set(employee.id, fullName);
+						}
+					});
+				}
+			}
+		} catch (error) {
+			console.error('Error fetching employee names:', error);
+		}
+
+		return employeeMap;
+	}
+
+	// Helper method to fetch department names by IDs
+	private async fetchDepartmentNames(accessToken: string, departmentIds: number[]): Promise<Map<number, string>> {
+		const departmentMap = new Map<number, string>();
+		
+		if (departmentIds.length === 0) return departmentMap;
+
+		try {
+			const response = await fetch('https://openapi.planday.com/hr/v1.0/Departments', {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
+				}
+			});
+
+			if (response.ok) {
+				const departmentData = await response.json();
+				if (departmentData.data) {
+					departmentData.data.forEach((department: any) => {
+						if (departmentIds.includes(department.id)) {
+							departmentMap.set(department.id, department.name || `Department ${department.id}`);
+						}
+					});
+				}
+			}
+		} catch (error) {
+			console.error('Error fetching department names:', error);
+		}
+
+		return departmentMap;
 	}
 
 	private async fetchEmployees(accessToken: string, department?: string): Promise<string> {

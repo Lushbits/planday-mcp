@@ -79,4 +79,40 @@ export function registerShiftTools(server: McpServer) {
       }
     }
   );
+
+  // Get shift types tool
+  server.tool(
+    "get-shift-types",
+    {},
+    async () => {
+      try {
+        const accessToken = await authService.getValidAccessToken();
+        if (!accessToken) {
+          return {
+            content: [{
+              type: "text",
+              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
+            }]
+          };
+        }
+
+        const result = await plandayAPI.getShiftTypes(accessToken);
+        const formatted = DataFormatters.formatShiftTypes(result.data);
+        
+        return {
+          content: [{
+            type: "text",
+            text: formatted
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: DataFormatters.formatError("fetching shift types", error)
+          }]
+        };
+      }
+    }
+  );
 }

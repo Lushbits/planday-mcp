@@ -231,7 +231,7 @@ export class MyMCP extends McpAgent {
 	}
 
 	private async fetchShifts(accessToken: string, startDate: string, endDate: string): Promise<string> {
-		const response = await fetch(`https://openapi.planday.com/reports/v1/Shifts?startDate=${startDate}&endDate=${endDate}`, {
+		const response = await fetch(`https://openapi.planday.com/scheduling/v1.0/shifts?from=${startDate}&to=${endDate}`, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
 				'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
@@ -266,7 +266,7 @@ export class MyMCP extends McpAgent {
 	}
 
 	private async fetchEmployees(accessToken: string, department?: string): Promise<string> {
-		let url = 'https://openapi.planday.com/hr/v1.0/employees';
+		let url = 'https://openapi.planday.com/hr/v1.0/Employees';
 		if (department) {
 			url += `?department=${encodeURIComponent(department)}`;
 		}

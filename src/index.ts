@@ -312,14 +312,16 @@ export class MyMCP extends McpAgent {
 			return `No shifts found for the period ${startDate} to ${endDate}`;
 		}
 
-		// Collect unique employee and department IDs to minimize API calls
+		// Collect unique employee, department, and position IDs to minimize API calls
 		const employeeIds = [...new Set(data.data.filter((shift: any) => shift.employeeId).map((shift: any) => shift.employeeId))];
 		const departmentIds = [...new Set(data.data.map((shift: any) => shift.departmentId).filter(Boolean))];
+		const positionIds = [...new Set(data.data.map((shift: any) => shift.positionId).filter(Boolean))];
 
-		// Fetch employee and department data in parallel
-		const [employeeMap, departmentMap] = await Promise.all([
+		// Fetch employee, department, and position data in parallel
+		const [employeeMap, departmentMap, positionMap] = await Promise.all([
 			this.fetchEmployeeNames(accessToken, employeeIds),
-			this.fetchDepartmentNames(accessToken, departmentIds)
+			this.fetchDepartmentNames(accessToken, departmentIds),
+			this.fetchPositionNames(accessToken, positionIds)
 		]);
 
 		// Format the shifts data with resolved names
@@ -333,14 +335,15 @@ export class MyMCP extends McpAgent {
 			// Get names from maps
 			const employeeName = shift.employeeId ? employeeMap.get(shift.employeeId) || `Employee ID: ${shift.employeeId}` : 'Unassigned';
 			const departmentName = shift.departmentId ? departmentMap.get(shift.departmentId) || `Department ID: ${shift.departmentId}` : 'No department';
+			const positionName = shift.positionId ? positionMap.get(shift.positionId) || `Position ID: ${shift.positionId}` : null;
 			
 			result += `${index + 1}. ${employeeName}\n`;
 			result += `   🏢 ${departmentName}\n`;
 			result += `   ⏰ ${startTime} - ${endTime}\n`;
 			result += `   📊 Status: ${shift.status || 'Unknown'}\n`;
 			result += `   📅 Date: ${shift.date}\n`;
-			if (shift.positionId) {
-				result += `   💼 Position ID: ${shift.positionId}\n`;
+			if (positionName) {
+				result += `   💼 Position: ${positionName}\n`;
 			}
 			result += '\n';
 		});
@@ -411,6 +414,46 @@ export class MyMCP extends McpAgent {
 		}
 
 		return departmentMap;
+	}
+
+	// Helper method to fetch position names by IDs
+	private async fetchPositionNames(accessToken: string, positionIds: number[]): Promise<Map<number, string>> {
+		const positionMap = new Map<number, string>();
+		
+		if (positionIds.length === 0) return positionMap;
+
+		try {
+			// Fetch positions one by one (since the API endpoint requires individual position IDs)
+			const positionPromises = positionIds.map(async (positionId) => {
+				try {
+					const response = await fetch(`https://openapi.planday.com/scheduling/v1.0/positions/${positionId}`, {
+						headers: {
+							'Authorization': `Bearer ${accessToken}`,
+							'X-ClientId': "4b79b7b4-932a-4a3b-9400-dcc24ece299e"
+						}
+					});
+
+					if (response.ok) {
+						const positionData = await response.json();
+						if (positionData.data && positionData.data.name) {
+							return { id: positionId, name: positionData.data.name };
+						}
+					}
+				} catch (error) {
+					console.error(`Error fetching position ${positionId}:`, error);
+				}
+				return { id: positionId, name: `Position ${positionId}` };
+			});
+
+			const positions = await Promise.all(positionPromises);
+			positions.forEach(({ id, name }) => {
+				positionMap.set(id, name);
+			});
+		} catch (error) {
+			console.error('Error fetching position names:', error);
+		}
+
+		return positionMap;
 	}
 
 	private async fetchEmployees(accessToken: string, department?: string): Promise<string> {

@@ -312,16 +312,22 @@ export class MyMCP extends McpAgent {
 			return `No shifts found for the period ${startDate} to ${endDate}`;
 		}
 
-		// Format the shifts data nicely
-		let result = `📅 Shifts from ${startDate} to ${endDate}:\n\n`;
+		// Format the shifts data with available fields
+		let result = `📅 Shifts from ${startDate} to ${endDate} (${data.data.length} shifts found):\n\n`;
 		
 		data.data.forEach((shift: any, index: number) => {
-			result += `${index + 1}. ${shift.employeeName || 'Unknown Employee'}\n`;
-			result += `   📍 ${shift.departmentName || 'No department'}\n`;
-			result += `   ⏰ ${shift.startTime} - ${shift.endTime}\n`;
+			// Format dates nicely
+			const startTime = shift.startDateTime ? new Date(shift.startDateTime).toLocaleString() : 'No start time';
+			const endTime = shift.endDateTime ? new Date(shift.endDateTime).toLocaleString() : 'No end time';
+			
+			result += `${index + 1}. Shift ID: ${shift.id}\n`;
+			result += `   👤 Employee ID: ${shift.employeeId || 'Unassigned'}\n`;
+			result += `   🏢 Department ID: ${shift.departmentId || 'No department'}\n`;
+			result += `   ⏰ ${startTime} - ${endTime}\n`;
 			result += `   📊 Status: ${shift.status || 'Unknown'}\n`;
-			if (shift.breakMinutes) {
-				result += `   ☕ Break: ${shift.breakMinutes} minutes\n`;
+			result += `   📅 Date: ${shift.date}\n`;
+			if (shift.positionId) {
+				result += `   💼 Position ID: ${shift.positionId}\n`;
 			}
 			result += '\n';
 		});

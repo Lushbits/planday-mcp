@@ -131,28 +131,29 @@ export class MyMCP extends McpAgent {
 			const sessionId = "default-session";
 
 			// Exchange refresh token for access token
-			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body: new URLSearchParams({
-					client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
-					grant_type: 'refresh_token',
-					refresh_token: refreshToken
-				})
-			});
+const tokenResponse = await fetch('https://id.planday.com/connect/token', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+        client_id: "4b79b7b4-932a-4a3b-9400-dcc24ece299e",
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken
+    })
+});
 
-			console.log('Token response status:', tokenResponse.status);
-			const tokenData = await tokenResponse.json();
-			console.log('Token response data:', tokenData);
+console.log('Token response status:', tokenResponse.status);
 
-			if (!tokenResponse.ok) {
-    				return { success: false, error: `Token exchange failed: ${tokenResponse.status} - ${JSON.stringify(tokenData)}` };
-			}
+if (!tokenResponse.ok) {
+    const errorData = await tokenResponse.json();
+    console.log('Token error data:', errorData);
+    return { success: false, error: `Token exchange failed: ${tokenResponse.status} - ${JSON.stringify(errorData)}` };
+}
 
-			const tokenData = await tokenResponse.json();
-			const accessToken = tokenData.access_token;
+const tokenData = await tokenResponse.json();
+console.log('Token response data:', tokenData);
+const accessToken = tokenData.access_token;
 
 			// Get portal information
 			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {

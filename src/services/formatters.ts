@@ -154,6 +154,42 @@ export class DataFormatters {
     return result;
   }
 
+  static formatShiftTypes(shiftTypes: PlandayShiftType[]): string {
+    if (!shiftTypes || shiftTypes.length === 0) {
+      return 'No shift types found';
+    }
+
+    let result = `🏷️ Shift Types (${shiftTypes.length} found):\n\n`;
+    
+    shiftTypes.forEach((shiftType, index) => {
+      result += `${index + 1}. ${shiftType.name}\n`;
+      result += `   🆔 ID: ${shiftType.id}\n`;
+      result += `   ${shiftType.isActive ? '✅' : '❌'} Active: ${shiftType.isActive}\n`;
+      
+      if (shiftType.color) {
+        result += `   🎨 Color: ${shiftType.color}\n`;
+      }
+      
+      if (shiftType.salaryCode) {
+        result += `   💼 Salary Code: ${shiftType.salaryCode}\n`;
+      }
+      
+      // Payment info
+      if (shiftType.paymentType === 'Percentage' && shiftType.payPercentage) {
+        result += `   💰 Pay: ${shiftType.payPercentage}% (Percentage)\n`;
+      } else if (shiftType.paymentType === 'Monetary' && shiftType.payMonetary) {
+        result += `   💰 Pay: ${shiftType.payMonetary} (Monetary)\n`;
+      }
+      
+      result += `   ☕ Allows Breaks: ${shiftType.allowsBreaks ? 'Yes' : 'No'}\n`;
+      result += `   📅 Allow Booking: ${shiftType.allowBooking ? 'Yes' : 'No'}\n`;
+      result += `   🖨️ Include in Print: ${shiftType.includeInSchedulePrint ? 'Yes' : 'No'}\n`;
+      result += '\n';
+    });
+
+    return result;
+  }
+
   static formatDebugInfo(sessionExists: boolean, sessionData: any): string {
     return `Debug info:
 - Session exists: ${sessionExists}

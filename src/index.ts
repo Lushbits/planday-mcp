@@ -21,22 +21,17 @@ export class MyMCP extends McpAgent {
 		version: "1.0.0",
 	});
 
-	// Static storage for environment and session (simple approach)
-	private static currentEnv?: Env;
-	private static currentSessionId?: string;
-
 	async init() {
-
 		// Planday authentication tool - customers provide their refresh token
 		this.server.tool(
 			"authenticate-planday",
 			{ 
 				refreshToken: z.string().describe("Your Planday refresh token from API Access settings")
 			},
-			async ({ refreshToken }) => {
+			async ({ refreshToken }, { env }) => {
 				try {
 					// Validate and store the token
-					const result = await MyMCP.authenticatePlanday(refreshToken);
+					const result = await this.authenticatePlanday(refreshToken, env);
 					return {
 						content: [{
 							type: "text",
@@ -128,63 +123,6 @@ export class MyMCP extends McpAgent {
 				}
 			}
 		);
-	}
-
-	private async authenticatePlanday(refreshToken: string, env: Env): Promise<{success: boolean, portalName?: string, error?: string}> {
-		try {
-			// Generate session ID
-			const sessionId = Math.random().toString(36);
-
-			// Exchange refresh token for access token
-			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body: new URLSearchParams({
-					client_id: env.PLANDAY_APP_ID,
-					grant_type: 'refresh_token',
-					refresh_token: refreshToken
-				})
-			});
-
-			if (!tokenResponse.ok) {
-				return { success: false, error: `Invalid refresh token: ${tokenResponse.status}` };
-			}
-
-			const tokenData = await tokenResponse.json();
-			const accessToken = tokenData.access_token;
-
-			// Get portal information
-			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
-				headers: {
-					'Authorization': `Bearer ${accessToken}`,
-					'X-ClientId': env.PLANDAY_APP_ID
-				}
-			});
-
-			if (!portalResponse.ok) {
-				return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
-			}
-
-			const portalData = await portalResponse.json();
-			const portalId = portalData.id;
-			const portalName = portalData.name;
-
-			// Store tokens for this session
-			const tokenInfo: PlandayTokens = {
-				refreshToken,
-				accessToken,
-				portalId,
-				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
-			};
-
-			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
-
-			return { success: true, portalName };
-		} catch (error) {
-			return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-		}
 	}
 
 	private async authenticatePlanday(refreshToken: string, env: Env): Promise<{success: boolean, portalName?: string, error?: string}> {

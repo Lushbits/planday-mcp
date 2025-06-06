@@ -318,8 +318,13 @@ export class MyMCP extends McpAgent {
 
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		console.log('=== FETCH HANDLER DEBUG ===');
+		console.log('env.PLANDAY_APP_ID:', env.PLANDAY_APP_ID);
+		console.log('env.PLANDAY_TOKENS exists:', !!env.PLANDAY_TOKENS);
+		
 		// Set global environment for all MCP operations
 		MyMCP.setEnvironment(env);
+		console.log('Global environment set');
 		
 		const url = new URL(request.url);
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {

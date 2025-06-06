@@ -63,9 +63,9 @@ export class MyMCP extends McpAgent {
 				startDate: z.string().describe("Start date in YYYY-MM-DD format"),
 				endDate: z.string().describe("End date in YYYY-MM-DD format")
 			},
-			async ({ startDate, endDate }) => {
+			async ({ startDate, endDate }, { env }) => {
 				try {
-					const accessToken = await MyMCP.getValidAccessToken();
+					const accessToken = await this.getValidAccessToken(env);
 					if (!accessToken) {
 						return {
 							content: [{
@@ -75,7 +75,7 @@ export class MyMCP extends McpAgent {
 						};
 					}
 
-					const shifts = await MyMCP.fetchShifts(accessToken, startDate, endDate);
+					const shifts = await this.fetchShifts(accessToken, startDate, endDate, env);
 					return {
 						content: [{
 							type: "text",
@@ -99,9 +99,9 @@ export class MyMCP extends McpAgent {
 			{
 				department: z.string().optional().describe("Filter by department name (optional)")
 			},
-			async ({ department }) => {
+			async ({ department }, { env }) => {
 				try {
-					const accessToken = await MyMCP.getValidAccessToken();
+					const accessToken = await this.getValidAccessToken(env);
 					if (!accessToken) {
 						return {
 							content: [{
@@ -111,7 +111,7 @@ export class MyMCP extends McpAgent {
 						};
 					}
 
-					const employees = await MyMCP.fetchEmployees(accessToken, department);
+					const employees = await this.fetchEmployees(accessToken, department, env);
 					return {
 						content: [{
 							type: "text",
@@ -130,12 +130,11 @@ export class MyMCP extends McpAgent {
 		);
 	}
 
-	private static async authenticatePlanday(refreshToken: string): Promise<{success: boolean, portalName?: string, error?: string}> {
-		if (!MyMCP.currentEnv || !MyMCP.currentSessionId) {
-			throw new Error("Environment not initialized");
-		}
-
+	private async authenticatePlanday(refreshToken: string, env: Env): Promise<{success: boolean, portalName?: string, error?: string}> {
 		try {
+			// Generate session ID
+			const sessionId = Math.random().toString(36);
+
 			// Exchange refresh token for access token
 			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
 				method: 'POST',
@@ -143,7 +142,7 @@ export class MyMCP extends McpAgent {
 					'Content-Type': 'application/x-www-form-urlencoded',
 				},
 				body: new URLSearchParams({
-					client_id: MyMCP.currentEnv.PLANDAY_APP_ID,
+					client_id: env.PLANDAY_APP_ID,
 					grant_type: 'refresh_token',
 					refresh_token: refreshToken
 				})
@@ -160,7 +159,7 @@ export class MyMCP extends McpAgent {
 			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
 				headers: {
 					'Authorization': `Bearer ${accessToken}`,
-					'X-ClientId': MyMCP.currentEnv.PLANDAY_APP_ID
+					'X-ClientId': env.PLANDAY_APP_ID
 				}
 			});
 
@@ -180,7 +179,7 @@ export class MyMCP extends McpAgent {
 				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
 			};
 
-			await MyMCP.currentEnv.PLANDAY_TOKENS.put(MyMCP.currentSessionId, JSON.stringify(tokenInfo));
+			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
 
 			return { success: true, portalName };
 		} catch (error) {
@@ -188,11 +187,68 @@ export class MyMCP extends McpAgent {
 		}
 	}
 
-	private static async getValidAccessToken(): Promise<string | null> {
-		if (!MyMCP.currentEnv || !MyMCP.currentSessionId) return null;
-
+	private async authenticatePlanday(refreshToken: string, env: Env): Promise<{success: boolean, portalName?: string, error?: string}> {
 		try {
-			const storedData = await MyMCP.currentEnv.PLANDAY_TOKENS.get(MyMCP.currentSessionId);
+			// Use a fixed session key for simplicity (in real app, this would be user-specific)
+			const sessionId = "default-session";
+
+			// Exchange refresh token for access token
+			const tokenResponse = await fetch('https://id.planday.com/connect/token', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					client_id: env.PLANDAY_APP_ID,
+					grant_type: 'refresh_token',
+					refresh_token: refreshToken
+				})
+			});
+
+			if (!tokenResponse.ok) {
+				return { success: false, error: `Invalid refresh token: ${tokenResponse.status}` };
+			}
+
+			const tokenData = await tokenResponse.json();
+			const accessToken = tokenData.access_token;
+
+			// Get portal information
+			const portalResponse = await fetch('https://openapi.planday.com/portal/v1/Portal', {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'X-ClientId': env.PLANDAY_APP_ID
+				}
+			});
+
+			if (!portalResponse.ok) {
+				return { success: false, error: `Cannot access portal: ${portalResponse.status}` };
+			}
+
+			const portalData = await portalResponse.json();
+			const portalId = portalData.id;
+			const portalName = portalData.name;
+
+			// Store tokens for this session
+			const tokenInfo: PlandayTokens = {
+				refreshToken,
+				accessToken,
+				portalId,
+				expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString()
+			};
+
+			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
+
+			return { success: true, portalName };
+		} catch (error) {
+			return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+		}
+	}
+
+	private async getValidAccessToken(env: Env): Promise<string | null> {
+		const sessionId = "default-session";
+		
+		try {
+			const storedData = await env.PLANDAY_TOKENS.get(sessionId);
 			if (!storedData) return null;
 
 			const tokenInfo: PlandayTokens = JSON.parse(storedData);
@@ -209,7 +265,7 @@ export class MyMCP extends McpAgent {
 					'Content-Type': 'application/x-www-form-urlencoded',
 				},
 				body: new URLSearchParams({
-					client_id: MyMCP.currentEnv.PLANDAY_APP_ID,
+					client_id: env.PLANDAY_APP_ID,
 					grant_type: 'refresh_token',
 					refresh_token: tokenInfo.refreshToken
 				})
@@ -223,7 +279,7 @@ export class MyMCP extends McpAgent {
 			tokenInfo.accessToken = tokenData.access_token;
 			tokenInfo.expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
 			
-			await MyMCP.currentEnv.PLANDAY_TOKENS.put(MyMCP.currentSessionId, JSON.stringify(tokenInfo));
+			await env.PLANDAY_TOKENS.put(sessionId, JSON.stringify(tokenInfo));
 			
 			return tokenData.access_token;
 		} catch (error) {
@@ -231,11 +287,11 @@ export class MyMCP extends McpAgent {
 		}
 	}
 
-	private static async fetchShifts(accessToken: string, startDate: string, endDate: string): Promise<string> {
+	private async fetchShifts(accessToken: string, startDate: string, endDate: string, env: Env): Promise<string> {
 		const response = await fetch(`https://openapi.planday.com/reports/v1/Shifts?startDate=${startDate}&endDate=${endDate}`, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
-				'X-ClientId': MyMCP.currentEnv!.PLANDAY_APP_ID
+				'X-ClientId': env.PLANDAY_APP_ID
 			}
 		});
 
@@ -266,7 +322,7 @@ export class MyMCP extends McpAgent {
 		return result;
 	}
 
-	private static async fetchEmployees(accessToken: string, department?: string): Promise<string> {
+	private async fetchEmployees(accessToken: string, department: string | undefined, env: Env): Promise<string> {
 		let url = 'https://openapi.planday.com/hr/v1/employees';
 		if (department) {
 			url += `?department=${encodeURIComponent(department)}`;
@@ -275,7 +331,7 @@ export class MyMCP extends McpAgent {
 		const response = await fetch(url, {
 			headers: {
 				'Authorization': `Bearer ${accessToken}`,
-				'X-ClientId': MyMCP.currentEnv!.PLANDAY_APP_ID
+				'X-ClientId': env.PLANDAY_APP_ID
 			}
 		});
 
@@ -310,10 +366,6 @@ export class MyMCP extends McpAgent {
 
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
-		// Set the environment and session for this request
-		MyMCP.currentEnv = env;
-		MyMCP.currentSessionId = request.headers.get('cf-ray') || Math.random().toString(36);
-		
 		const url = new URL(request.url);
 		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
 			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);

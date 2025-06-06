@@ -2,6 +2,10 @@ import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { plandayAPI } from './services/planday-api.js';
+import { authService } from './services/auth.js';
+import { DataFormatters } from './services/formatters.js';
+
 interface PlandayTokens {
 	refreshToken: string;
 	accessToken?: string;
@@ -17,6 +21,167 @@ export class MyMCP extends McpAgent {
 	});
 
 	async init() {
+		// NEW: Get departments using the new service layer
+this.server.tool(
+	"get-departments-v2",
+	{},
+	async () => {
+		try {
+			const accessToken = await authService.getValidAccessToken();
+			if (!accessToken) {
+				return {
+					content: [{
+						type: "text",
+						text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
+					}]
+				};
+			}
+
+			const result = await plandayAPI.getDepartments(accessToken);
+			const formatted = DataFormatters.formatDepartments(result.data);
+			
+			return {
+				content: [{
+					type: "text",
+					text: formatted
+				}]
+			};
+		} catch (error) {
+			return {
+				content: [{
+					type: "text",
+					text: DataFormatters.formatError("fetching departments", error)
+				}]
+			};
+		}
+	}
+);
+
+// NEW: Get shifts using the new service layer (test alongside your existing get-shifts)
+this.server.tool(
+	"get-shifts-v2",
+	{
+		startDate: z.string().describe("Start date in YYYY-MM-DD format"),
+		endDate: z.string().describe("End date in YYYY-MM-DD format")
+	},
+	async ({ startDate, endDate }) => {
+		try {
+			const accessToken = await authService.getValidAccessToken();
+			if (!accessToken) {
+				return {
+					content: [{
+						type: "text",
+						text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
+					}]
+				};
+			}
+
+			// Fetch shifts data
+			const shiftsResult = await plandayAPI.getShifts(accessToken, startDate, endDate);
+			
+			if (!shiftsResult.data || shiftsResult.data.length === 0) {
+				return {
+					content: [{
+						type: "text",
+						text: `No shifts found for the period ${startDate} to ${endDate}`
+					}]
+				};
+			}
+
+			// Get unique IDs for batch lookups
+			const employeeIds = [...new Set(shiftsResult.data.filter(shift => shift.employeeId).map(shift => shift.employeeId!))];
+			const departmentIds = [...new Set(shiftsResult.data.map(shift => shift.departmentId).filter(Boolean) as number[])];
+			const positionIds = [...new Set(shiftsResult.data.map(shift => shift.positionId).filter(Boolean) as number[])];
+
+			// Fetch lookup data in parallel using the new service
+			const [employeeMap, departmentMap, positionMap] = await Promise.all([
+				plandayAPI.getEmployeeMap(accessToken, employeeIds),
+				plandayAPI.getDepartmentMap(accessToken, departmentIds),
+				plandayAPI.getPositions(accessToken, positionIds)
+			]);
+
+			// Format using the new formatter
+			const formatted = DataFormatters.formatShifts(
+				shiftsResult.data, 
+				startDate, 
+				endDate, 
+				employeeMap, 
+				departmentMap, 
+				positionMap
+			);
+
+			return {
+				content: [{
+					type: "text",
+					text: formatted
+				}]
+			};
+		} catch (error) {
+			return {
+				content: [{
+					type: "text",
+					text: DataFormatters.formatError("fetching shifts", error)
+				}]
+			};
+		}
+	}
+);
+
+// NEW: Test authentication using the new service
+this.server.tool(
+	"authenticate-planday-v2",
+	{ 
+		refreshToken: z.string().describe("Your Planday refresh token from API Access settings")
+	},
+	async ({ refreshToken }) => {
+		try {
+			const result = await authService.authenticatePlanday(refreshToken);
+			return {
+				content: [{
+					type: "text",
+					text: DataFormatters.formatAuthenticationResult(result.success, result.portalName, result.error)
+				}]
+			};
+		} catch (error) {
+			return {
+				content: [{
+					type: "text",
+					text: DataFormatters.formatError("authenticating", error)
+				}]
+			};
+		}
+	}
+);
+
+// NEW: Debug using new service
+this.server.tool(
+	"debug-session-v2",
+	{},
+	async () => {
+		try {
+			const sessionInfo = authService.getSessionInfo();
+			const isAuth = authService.isAuthenticated();
+			
+			return {
+				content: [{
+					type: "text",
+					text: `🔍 New Service Debug:
+- Is Authenticated: ${isAuth}
+- Session Info: ${sessionInfo ? JSON.stringify(sessionInfo, null, 2) : 'null'}
+- Services: ✅ PlandayAPI, ✅ AuthService, ✅ DataFormatters loaded`
+				}]
+			};
+		} catch (error) {
+			return {
+				content: [{
+					type: "text", 
+					text: DataFormatters.formatError("debugging session", error)
+				}]
+			};
+		}
+	}
+);
+		
 		// Planday authentication tool - customers provide their refresh token
 		this.server.tool(
 			"authenticate-planday",

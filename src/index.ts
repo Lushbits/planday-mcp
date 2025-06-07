@@ -1,42 +1,41 @@
-// src/index.ts - Corrected with .ts imports
-
-import { McpAgent } from "agents/mcp";
+// src/index.ts - Updated with new payroll tools
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 
-// Import tool registration functions - using .ts extensions
-import { registerAuthTools } from './tools/auth-tools.ts';
-import { registerEmployeeTools } from './tools/employee-tools.ts';
-import { registerShiftTools } from './tools/shift-tools.ts';
-import { registerAbsenceTools } from './tools/absence-tools.ts';
+// Import all tool registration functions
+import { registerAuthTools } from "./tools/auth-tools.ts";
+import { registerEmployeeTools } from "./tools/employee-tools.ts";
+import { registerShiftTools } from "./tools/shift-tools.ts";
+import { registerAbsenceTools } from "./tools/absence-tools.ts";
+import { registerPayrollTools } from "./tools/payroll-tools.ts"; // NEW!
 
-// Define our Planday MCP agent
-export class MyMCP extends McpAgent {
-	server = new McpServer({
-		name: "Planday Integration",
-		version: "1.0.0",
-	});
+// Create MCP server
+const server = new McpServer({
+  name: "planday-mcp-server",
+  version: "2.0.0"
+});
 
-	async init() {
-		// Register all tool categories
-		registerAuthTools(this.server);
-		registerEmployeeTools(this.server);
-		registerShiftTools(this.server);
-		registerAbsenceTools(this.server);
-		
-		console.log("🚀 Planday MCP Server initialized with modular tools + absence management + shift types");
-	}
-}
+// Register all tool categories
+registerAuthTools(server);      // Authentication & debug tools
+registerEmployeeTools(server);  // HR management tools
+registerShiftTools(server);     // Scheduling tools
+registerAbsenceTools(server);   // Absence management tools
+registerPayrollTools(server);   // Payroll & cost analysis tools (NEW!)
 
-// Export handler for Cloudflare Workers
+// Setup SSE transport and start server
+const transport = new SSEServerTransport("/sse", {
+  headers: {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  }
+});
+
+server.connect(transport).then(() => {
+  console.log("🚀 Planday MCP Server running with 13 tools across 5 domains!");
+  console.log("📊 New: Payroll cost analysis and labor expense tracking");
+}).catch(console.error);
+
 export default {
-	fetch(request: Request, env: any, ctx: ExecutionContext) {
-		const url = new URL(request.url);
-		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
-		}
-		if (url.pathname === "/mcp") {
-			return MyMCP.serve("/mcp").fetch(request, env, ctx);
-		}
-		return new Response("Not found", { status: 404 });
-	},
+  fetch: transport.fetch.bind(transport)
 };

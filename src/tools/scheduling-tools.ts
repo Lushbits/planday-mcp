@@ -23,8 +23,9 @@ import { getEmployeesByIds, getDepartmentsByIds } from '../services/api/hr-api';
 import { 
   formatShifts, formatShiftTypes, formatPositions, formatSections, 
   formatScheduleDays, formatSkills, formatShiftHistory, formatTimeAndCost,
-  formatShiftOperationResult, formatError, formatSuccess 
+  formatShiftOperationResult
 } from '../services/formatters/scheduling-formatters';
+import { formatError, formatSuccess } from '../services/formatters/shared-formatters';
 
 export function registerSchedulingTools(server: McpServer) {
 

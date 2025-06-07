@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Import working tool files
 import { registerAuthTools } from './tools/auth-tools';
-import { registerEmployeeTools } from './tools/employee-tools';
+import { registerHRTools } from './tools/hr-tools'; // Comprehensive HR domain tools
 import { registerSchedulingTools } from './tools/scheduling-tools';
 import { registerAbsenceTools } from './tools/absence-tools';
 import { registerPayrollTools } from './tools/payroll-tools';
@@ -20,12 +20,12 @@ export class MyMCP extends McpAgent {
 	async init() {
 		// Register working tools
 		registerAuthTools(this.server);
-		registerEmployeeTools(this.server);
+		registerHRTools(this.server);
 		registerSchedulingTools(this.server);
 		registerAbsenceTools(this.server);
 		registerPayrollTools(this.server);
 		
-		console.log("🚀 Planday MCP Server working with auth + employees + scheduling + absence + payroll!");
+		console.log("🚀 Planday MCP Server ready with comprehensive domains: Auth + HR + Scheduling + Absence + Payroll!");
 	}
 }
 

@@ -2,9 +2,10 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { authService } from '../services/auth.js';
-import { plandayAPI } from '../services/planday-api.js';
-import { DataFormatters } from '../services/formatters.js';
+import { ensureAuthenticated } from '../services/auth.ts';
+import { getShifts, getShiftTypes, getPositionsByIds, getShiftTypesByIds } from '../services/api/scheduling-api.ts';
+import { getEmployeesByIds, getDepartmentsByIds } from '../services/api/hr-api.ts';
+import { DataFormatters } from '../services/formatters.ts';
 
 export function registerShiftTools(server: McpServer) {
   // Get shifts tool
@@ -16,20 +17,12 @@ export function registerShiftTools(server: McpServer) {
     },
     async ({ startDate, endDate }) => {
       try {
-        const accessToken = await authService.getValidAccessToken();
-        if (!accessToken) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
-            }]
-          };
-        }
+        await ensureAuthenticated();
 
         // Fetch shifts data
-        const shiftsResult = await plandayAPI.getShifts(accessToken, startDate, endDate);
+        const shifts = await getShifts(startDate, endDate);
         
-        if (!shiftsResult.data || shiftsResult.data.length === 0) {
+        if (!shifts || shifts.length === 0) {
           return {
             content: [{
               type: "text",
@@ -39,28 +32,50 @@ export function registerShiftTools(server: McpServer) {
         }
 
         // Get unique IDs for batch lookups
-        const employeeIds = [...new Set(shiftsResult.data.filter(shift => shift.employeeId).map(shift => shift.employeeId!))];
-        const departmentIds = [...new Set(shiftsResult.data.map(shift => shift.departmentId).filter(Boolean) as number[])];
-        const positionIds = [...new Set(shiftsResult.data.map(shift => shift.positionId).filter(Boolean) as number[])];
-        const shiftTypeIds = [...new Set(shiftsResult.data.map(shift => shift.shiftTypeId).filter(Boolean) as number[])];
+        const employeeIds = [...new Set(shifts.filter(shift => shift.employeeId).map(shift => shift.employeeId!))];
+        const departmentIds = [...new Set(shifts.map(shift => shift.departmentId).filter(Boolean) as number[])];
+        const positionIds = [...new Set(shifts.map(shift => shift.positionId).filter(Boolean) as number[])];
+        const shiftTypeIds = [...new Set(shifts.map(shift => shift.shiftTypeId).filter(Boolean) as number[])];
 
         // Fetch lookup data in parallel
-        const [employeeMap, departmentMap, positionMap, shiftTypeMap] = await Promise.all([
-          plandayAPI.getEmployeeMap(accessToken, employeeIds),
-          plandayAPI.getDepartmentMap(accessToken, departmentIds),
-          plandayAPI.getPositions(accessToken, positionIds),
-          plandayAPI.getShiftTypeMap(accessToken, shiftTypeIds)
+        const [employeesMap, departmentsMap, positionsMap, shiftTypesMap] = await Promise.all([
+          getEmployeesByIds(employeeIds),
+          getDepartmentsByIds(departmentIds),
+          getPositionsByIds(positionIds),
+          getShiftTypesByIds(shiftTypeIds)
         ]);
+
+        // Convert to name maps for formatter
+        const employeeNameMap = new Map<number, string>();
+        employeesMap.forEach((employee, id) => {
+          const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || `Employee ${id}`;
+          employeeNameMap.set(id, fullName);
+        });
+
+        const departmentNameMap = new Map<number, string>();
+        departmentsMap.forEach((department, id) => {
+          departmentNameMap.set(id, department.name || `Department ${id}`);
+        });
+
+        const positionNameMap = new Map<number, string>();
+        positionsMap.forEach((position, id) => {
+          positionNameMap.set(id, position.name || `Position ${id}`);
+        });
+
+        const shiftTypeNameMap = new Map<number, string>();
+        shiftTypesMap.forEach((shiftType, id) => {
+          shiftTypeNameMap.set(id, shiftType.name || `Shift Type ${id}`);
+        });
 
         // Format using the formatter
         const formatted = DataFormatters.formatShifts(
-          shiftsResult.data, 
+          shifts, 
           startDate, 
           endDate, 
-          employeeMap, 
-          departmentMap, 
-          positionMap,
-          shiftTypeMap
+          employeeNameMap, 
+          departmentNameMap, 
+          positionNameMap,
+          shiftTypeNameMap
         );
 
         return {
@@ -86,18 +101,10 @@ export function registerShiftTools(server: McpServer) {
     {},
     async () => {
       try {
-        const accessToken = await authService.getValidAccessToken();
-        if (!accessToken) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
-            }]
-          };
-        }
+        await ensureAuthenticated();
 
-        const result = await plandayAPI.getShiftTypes(accessToken);
-        const formatted = DataFormatters.formatShiftTypes(result.data);
+        const shiftTypes = await getShiftTypes();
+        const formatted = DataFormatters.formatShiftTypes(shiftTypes);
         
         return {
           content: [{

@@ -1,12 +1,14 @@
 // src/services/formatters.ts
 
-import type { PlandayShift, PlandayEmployee, PlandayDepartment, PlandayAbsenceRecord, PlandayShiftType } from './planday-api.ts';
+import type { Shift, ShiftType, Position } from './api/scheduling-api.ts';
+import type { Employee, Department } from './api/hr-api.ts';
+import type { AbsenceRecord } from './api/absence-api.ts';
 import { PayrollData, calculatePayrollTotals, groupPayrollByEmployee, groupPayrollByDepartment } from "./api/payroll-api.ts";
 
 export class DataFormatters {
   
   static formatShifts(
-    shifts: PlandayShift[],
+    shifts: Shift[],
     startDate: string,
     endDate: string,
     employeeMap: Map<number, string>,
@@ -56,7 +58,7 @@ export class DataFormatters {
     return result;
   }
 
-  static formatEmployees(employees: PlandayEmployee[], department?: string): string {
+  static formatEmployees(employees: Employee[], department?: string): string {
     if (!employees || employees.length === 0) {
       return department 
         ? `No employees found in department: ${department}`
@@ -84,7 +86,7 @@ export class DataFormatters {
     return result;
   }
 
-  static formatDepartments(departments: PlandayDepartment[]): string {
+  static formatDepartments(departments: Department[]): string {
     if (!departments || departments.length === 0) {
       return 'No departments found';
     }
@@ -100,7 +102,7 @@ export class DataFormatters {
   }
 
   static formatAbsenceRecords(
-    absenceRecords: PlandayAbsenceRecord[],
+    absenceRecords: AbsenceRecord[],
     employeeMap: Map<number, string>,
     filters?: string
   ): string {
@@ -155,7 +157,7 @@ export class DataFormatters {
     return result;
   }
 
-  static formatShiftTypes(shiftTypes: PlandayShiftType[]): string {
+  static formatShiftTypes(shiftTypes: ShiftType[]): string {
     if (!shiftTypes || shiftTypes.length === 0) {
       return 'No shift types found';
     }

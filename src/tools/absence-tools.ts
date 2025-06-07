@@ -2,12 +2,13 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { authService } from '../services/auth.js';
-import { plandayAPI } from '../services/planday-api.js';
-import { DataFormatters } from '../services/formatters.js';
+import { ensureAuthenticated } from '../services/auth.ts';
+import { getAbsenceRecords, getAbsenceRecord, getPendingAbsenceRequests } from '../services/api/absence-api.ts';
+import { getEmployeesByIds } from '../services/api/hr-api.ts';
+import { DataFormatters } from '../services/formatters.ts';
 
 export function registerAbsenceTools(server: McpServer) {
-  // Get absence records tool below
+  // Get absence records tool
   server.tool(
     "get-absence-records",
     {
@@ -18,25 +19,17 @@ export function registerAbsenceTools(server: McpServer) {
     },
     async ({ employeeId, startDate, endDate, status }) => {
       try {
-        const accessToken = await authService.getValidAccessToken();
-        if (!accessToken) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
-            }]
-          };
-        }
+        await ensureAuthenticated();
 
         // Fetch absence records with filters
-        const result = await plandayAPI.getAbsenceRecords(accessToken, {
+        const absenceRecords = await getAbsenceRecords({
           employeeId,
           startDate,
           endDate,
           status
         });
 
-        if (!result.data || result.data.length === 0) {
+        if (!absenceRecords || absenceRecords.length === 0) {
           const filtersUsed = [
             employeeId && `Employee ID: ${employeeId}`,
             startDate && `Start: ${startDate}`,
@@ -55,8 +48,15 @@ export function registerAbsenceTools(server: McpServer) {
         }
 
         // Get employee names for the records
-        const employeeIds = [...new Set(result.data.map(record => record.employeeId))];
-        const employeeMap = await plandayAPI.getEmployeeMap(accessToken, employeeIds);
+        const employeeIds = [...new Set(absenceRecords.map(record => record.employeeId))];
+        const employeesMap = await getEmployeesByIds(employeeIds);
+        
+        // Convert to name map for formatter
+        const employeeNameMap = new Map<number, string>();
+        employeesMap.forEach((employee, id) => {
+          const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || `Employee ${id}`;
+          employeeNameMap.set(id, fullName);
+        });
 
         // Build filter description
         const filtersUsed = [
@@ -67,8 +67,8 @@ export function registerAbsenceTools(server: McpServer) {
         ].filter(Boolean).join(", ");
 
         const formatted = DataFormatters.formatAbsenceRecords(
-          result.data,
-          employeeMap,
+          absenceRecords,
+          employeeNameMap,
           filtersUsed
         );
 
@@ -97,19 +97,11 @@ export function registerAbsenceTools(server: McpServer) {
     },
     async ({ recordId }) => {
       try {
-        const accessToken = await authService.getValidAccessToken();
-        if (!accessToken) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
-            }]
-          };
-        }
+        await ensureAuthenticated();
 
-        const result = await plandayAPI.getAbsenceRecord(accessToken, recordId);
+        const absenceRecord = await getAbsenceRecord(recordId);
         
-        if (!result.data) {
+        if (!absenceRecord) {
           return {
             content: [{
               type: "text",
@@ -119,11 +111,16 @@ export function registerAbsenceTools(server: McpServer) {
         }
 
         // Get employee name for this record
-        const employeeMap = await plandayAPI.getEmployeeMap(accessToken, [result.data.employeeId]);
+        const employeesMap = await getEmployeesByIds([absenceRecord.employeeId]);
+        const employeeNameMap = new Map<number, string>();
+        employeesMap.forEach((employee, id) => {
+          const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || `Employee ${id}`;
+          employeeNameMap.set(id, fullName);
+        });
 
         const formatted = DataFormatters.formatAbsenceRecords(
-          [result.data],
-          employeeMap,
+          [absenceRecord],
+          employeeNameMap,
           `Record ID: ${recordId}`
         );
 
@@ -150,22 +147,12 @@ export function registerAbsenceTools(server: McpServer) {
     {},
     async () => {
       try {
-        const accessToken = await authService.getValidAccessToken();
-        if (!accessToken) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
-            }]
-          };
-        }
+        await ensureAuthenticated();
 
-        // Fetch only pending requests
-        const result = await plandayAPI.getAbsenceRecords(accessToken, {
-          status: "Pending"
-        });
+        // Fetch only pending requests using convenience function
+        const pendingRequests = await getPendingAbsenceRequests();
 
-        if (!result.data || result.data.length === 0) {
+        if (!pendingRequests || pendingRequests.length === 0) {
           return {
             content: [{
               type: "text",
@@ -175,12 +162,19 @@ export function registerAbsenceTools(server: McpServer) {
         }
 
         // Get employee names for the records
-        const employeeIds = [...new Set(result.data.map(record => record.employeeId))];
-        const employeeMap = await plandayAPI.getEmployeeMap(accessToken, employeeIds);
+        const employeeIds = [...new Set(pendingRequests.map(record => record.employeeId))];
+        const employeesMap = await getEmployeesByIds(employeeIds);
+        
+        // Convert to name map for formatter
+        const employeeNameMap = new Map<number, string>();
+        employeesMap.forEach((employee, id) => {
+          const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || `Employee ${id}`;
+          employeeNameMap.set(id, fullName);
+        });
 
         const formatted = DataFormatters.formatAbsenceRecords(
-          result.data,
-          employeeMap,
+          pendingRequests,
+          employeeNameMap,
           "Status: Pending (Awaiting Approval)"
         );
 

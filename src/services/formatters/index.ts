@@ -48,21 +48,6 @@ export {
   formatAuthenticationResult 
 } from './shared-formatters';
 
-// Legacy DataFormatters class for backward compatibility
-// This maintains the existing API while using the new modular functions
-export class DataFormatters {
-  static formatShifts = formatShifts;
-  static formatEmployees = formatEmployees;
-  static formatDepartments = formatDepartments;
-  static formatAbsenceRecords = formatAbsenceRecords;
-  static formatShiftTypes = formatShiftTypes;
-  static formatDebugInfo = formatDebugInfo;
-  static formatAPIResponse = formatAPIResponse;
-  static formatError = formatError;
-  static formatSuccess = formatSuccess;
-  static formatAuthenticationResult = formatAuthenticationResult;
-}
-
 // Re-export the individual functions for direct import
 export {
   // HR Domain Functions
@@ -103,4 +88,20 @@ export {
   formatError,
   formatSuccess,
   formatAuthenticationResult
-}; 
+};
+
+// Legacy DataFormatters class for backward compatibility
+// This maintains the existing API while using the new modular functions
+// MOVED TO END: Ensures all imports are resolved before class definition
+export class DataFormatters {
+  static formatShifts = formatShifts;
+  static formatEmployees = formatEmployees;
+  static formatDepartments = formatDepartments;
+  static formatAbsenceRecords = formatAbsenceRecords;
+  static formatShiftTypes = formatShiftTypes;
+  static formatDebugInfo = formatDebugInfo;
+  static formatAPIResponse = formatAPIResponse;
+  static formatError = formatError;
+  static formatSuccess = formatSuccess;
+  static formatAuthenticationResult = formatAuthenticationResult;
+} 

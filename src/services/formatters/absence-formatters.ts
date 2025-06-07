@@ -1,7 +1,7 @@
 // src/services/formatters/absence-formatters.ts
 // Absence Domain Formatters - Leave & Absence record data formatting
 
-import type { AbsenceRecord } from '../api/absence-api.ts';
+import type { AbsenceRecord } from '../api/absence-api';
 
 /**
  * Format absence records with detailed breakdown and status indicators

@@ -2,10 +2,10 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ensureAuthenticated } from '../services/auth.ts';
-import { getAbsenceRecords, getAbsenceRecord, getPendingAbsenceRequests } from '../services/api/absence-api.ts';
-import { getEmployeesByIds } from '../services/api/hr-api.ts';
-import { DataFormatters } from '../services/formatters.ts';
+import { ensureAuthenticated } from '../services/auth';
+import { getAbsenceRecords, getAbsenceRecord, getPendingAbsenceRequests } from '../services/api/absence-api';
+import { getEmployeesByIds } from '../services/api/hr-api';
+import { DataFormatters } from '../services/formatters';
 
 export function registerAbsenceTools(server: McpServer) {
   // Get absence records tool

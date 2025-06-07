@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ensureAuthenticated } from '../services/auth.ts';
+import { ensureAuthenticated } from '../services/auth';
 import {
   // Employee Management
   getEmployees,
@@ -44,7 +44,7 @@ import {
   createCustomFieldAttachment,
   updateCustomFieldAttachment,
   deleteCustomFieldAttachment,
-} from '../services/api/hr-api.ts';
+} from '../services/api/hr-api';
 
 import { 
   formatEmployees,
@@ -62,7 +62,7 @@ import {
   formatGroupOperationResult,
   formatSkillOperationResult,
   formatError
-} from '../services/formatters/hr-formatters.ts';
+} from '../services/formatters/hr-formatters';
 
 // =============================================================================
 // ZOD VALIDATION SCHEMAS

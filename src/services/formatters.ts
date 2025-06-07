@@ -4,4 +4,4 @@
 // This file maintained for backward compatibility during transition
 
 // Re-export everything from the new modular structure
-export * from './formatters/index.ts'; 
+export * from './formatters/index'; 

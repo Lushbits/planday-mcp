@@ -18,7 +18,7 @@ export {
   formatDepartmentOperationResult,
   formatGroupOperationResult,
   formatSkillOperationResult
-} from './hr-formatters.ts';
+} from './hr-formatters';
 
 // Scheduling Domain Formatters (Comprehensive)
 export { 
@@ -31,13 +31,13 @@ export {
   formatShiftHistory, 
   formatTimeAndCost,
   formatShiftOperationResult
-} from './scheduling-formatters.ts';
+} from './scheduling-formatters';
 
 // Absence Domain Formatters
-export { formatAbsenceRecords } from './absence-formatters.ts';
+export { formatAbsenceRecords } from './absence-formatters';
 
 // Payroll Domain Formatters
-export { formatPayrollSummary, formatShiftPayrollDetails } from './payroll-formatters.ts';
+export { formatPayrollSummary, formatShiftPayrollDetails } from './payroll-formatters';
 
 // Shared Utility Formatters
 export { 
@@ -46,7 +46,7 @@ export {
   formatError, 
   formatSuccess, 
   formatAuthenticationResult 
-} from './shared-formatters.ts';
+} from './shared-formatters';
 
 // Legacy DataFormatters class for backward compatibility
 // This maintains the existing API while using the new modular functions

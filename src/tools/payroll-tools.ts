@@ -2,10 +2,10 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getPayrollWithDepartmentBreakdown, getPayrollData } from "../services/api/payroll-api.ts";
-import { getEmployeesByIds } from "../services/api/hr-api.ts";
-import { formatPayrollSummary, formatShiftPayrollDetails } from "../services/formatters.ts";
-import { ensureAuthenticated } from "../services/auth.ts";
+import { getPayrollWithDepartmentBreakdown, getPayrollData } from "../services/api/payroll-api";
+import { getEmployeesByIds } from "../services/api/hr-api";
+import { formatPayrollSummary, formatShiftPayrollDetails } from "../services/formatters";
+import { ensureAuthenticated } from "../services/auth";
 
 export function registerPayrollTools(server: McpServer) {
   // Get detailed payroll data with cost breakdown

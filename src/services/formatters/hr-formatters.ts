@@ -12,7 +12,7 @@ import type {
   EmployeeFieldDefinitions,
   PaginatedResponse,
   EmployeeQueryParams,
-} from '../api/hr-api.ts';
+} from '../api/hr-api';
 
 // =============================================================================
 // UTILITY FUNCTIONS

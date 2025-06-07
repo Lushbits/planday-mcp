@@ -3,11 +3,11 @@ import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Import all tool registration functions
-import { registerAuthTools } from './tools/auth-tools.ts';
-import { registerHRTools } from './tools/hr-tools.ts';
-import { registerSchedulingTools } from './tools/scheduling-tools.ts'; // COMPREHENSIVE SCHEDULING
-import { registerAbsenceTools } from './tools/absence-tools.ts';
-import { registerPayrollTools } from './tools/payroll-tools.ts';
+import { registerAuthTools } from './tools/auth-tools';
+import { registerHRTools } from './tools/hr-tools';
+import { registerSchedulingTools } from './tools/scheduling-tools'; // COMPREHENSIVE SCHEDULING
+import { registerAbsenceTools } from './tools/absence-tools';
+import { registerPayrollTools } from './tools/payroll-tools';
 
 // Define our Planday MCP agent
 export class MyMCP extends McpAgent {

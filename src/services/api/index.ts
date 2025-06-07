@@ -2,16 +2,16 @@
 // Centralized exports for all domain APIs
 
 // HR Domain
-export * from './hr-api.ts';
+export * from './hr-api';
 
 // Scheduling Domain  
-export * from './scheduling-api.ts';
+export * from './scheduling-api';
 
 // Absence Domain
-export * from './absence-api.ts';
+export * from './absence-api';
 
 // Payroll Domain
-export * from './payroll-api.ts';
+export * from './payroll-api';
 
 // Re-export common auth functionality
-export { makeAuthenticatedRequest } from '../auth.ts';
+export { makeAuthenticatedRequest } from '../auth';

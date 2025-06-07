@@ -5,7 +5,7 @@
 import type { 
   Shift, ShiftType, Position, Section, ScheduleDay, Skill, 
   ShiftHistoryRecord, TimeAndCostData, ShiftCost 
-} from '../api/scheduling-api.ts';
+} from '../api/scheduling-api';
 
 // ================================
 // CORE SHIFT FORMATTERS

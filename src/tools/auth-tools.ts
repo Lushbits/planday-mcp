@@ -2,8 +2,8 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { authService, makeAuthenticatedRequest } from '../services/auth.ts';
-import { DataFormatters } from '../services/formatters.ts';
+import { authService, makeAuthenticatedRequest } from '../services/auth';
+import { DataFormatters } from '../services/formatters';
 
 export function registerAuthTools(server: McpServer) {
   // Main authentication tool

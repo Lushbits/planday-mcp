@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ensureAuthenticated } from '../services/auth.ts';
+import { ensureAuthenticated } from '../services/auth';
 import { 
   // Shifts
   getShifts, createShift, updateShift, deleteShift, getShiftById, 
@@ -18,13 +18,13 @@ import {
   getShiftHistory, getTimeAndCost,
   // Utility functions
   getPositionsByIds, getShiftTypesByIds
-} from '../services/api/scheduling-api.ts';
-import { getEmployeesByIds, getDepartmentsByIds } from '../services/api/hr-api.ts';
+} from '../services/api/scheduling-api';
+import { getEmployeesByIds, getDepartmentsByIds } from '../services/api/hr-api';
 import { 
   formatShifts, formatShiftTypes, formatPositions, formatSections, 
   formatScheduleDays, formatSkills, formatShiftHistory, formatTimeAndCost,
   formatShiftOperationResult, formatError, formatSuccess 
-} from '../services/formatters/scheduling-formatters.ts';
+} from '../services/formatters/scheduling-formatters';
 
 export function registerSchedulingTools(server: McpServer) {
 

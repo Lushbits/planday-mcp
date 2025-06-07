@@ -1,5 +1,5 @@
 // src/services/api/payroll-api.ts
-import { makeAuthenticatedRequest } from "../auth.js";
+import { makeAuthenticatedRequest } from "../auth.ts";
 
 // Payroll API Types
 export interface PayrollShift {

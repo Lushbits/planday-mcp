@@ -7,7 +7,17 @@ import { registerAuthTools } from "./tools/auth-tools.ts";
 import { registerEmployeeTools } from "./tools/employee-tools.ts";
 import { registerShiftTools } from "./tools/shift-tools.ts";
 import { registerAbsenceTools } from "./tools/absence-tools.ts";
-import { registerPayrollTools } from "./tools/payroll-tools.ts"; // NEW!
+import { registerPayrollTools } from "./tools/payroll-tools.ts";
+
+// Durable Object class for Cloudflare configuration
+export class MyMCP {
+  constructor(private state: DurableObjectState, private env: any) {}
+
+  async fetch(request: Request): Promise<Response> {
+    // This Durable Object is not actively used but required by wrangler config
+    return new Response("MyMCP Durable Object", { status: 200 });
+  }
+}
 
 // Create MCP server
 const server = new McpServer({
@@ -20,7 +30,7 @@ registerAuthTools(server);      // Authentication & debug tools
 registerEmployeeTools(server);  // HR management tools
 registerShiftTools(server);     // Scheduling tools
 registerAbsenceTools(server);   // Absence management tools
-registerPayrollTools(server);   // Payroll & cost analysis tools (NEW!)
+registerPayrollTools(server);   // Payroll & cost analysis tools
 
 // Setup SSE transport and start server
 const transport = new SSEServerTransport("/sse", {

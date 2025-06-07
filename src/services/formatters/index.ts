@@ -27,7 +27,7 @@ export {
   formatPositions, 
   formatSections,
   formatScheduleDays, 
-  formatSkills, 
+  formatSkills as formatSchedulingSkills, 
   formatShiftHistory, 
   formatTimeAndCost,
   formatShiftOperationResult
@@ -87,7 +87,7 @@ export {
   formatPositions,
   formatSections,
   formatScheduleDays,
-  formatSkills,
+  formatSchedulingSkills,
   formatShiftHistory,
   formatTimeAndCost,
   formatShiftOperationResult,

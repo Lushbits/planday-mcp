@@ -1,6 +1,5 @@
 // src/services/auth.ts
-
-import { plandayAPI } from './planday-api.js';
+import { plandayAPI } from './planday-api.ts';
 
 export interface PlandayTokens {
   refreshToken: string;
@@ -20,7 +19,7 @@ export class AuthService {
     try {
       // Test token exchange using the API service
       const tokenData = await plandayAPI.exchangeRefreshToken(refreshToken);
-
+      
       // Store session data in globalThis (same as your current implementation)
       this.setSession({
         refreshToken: refreshToken,
@@ -28,7 +27,7 @@ export class AuthService {
         expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString(),
         portalId: "authenticated"
       });
-
+      
       return { 
         success: true, 
         portalName: "Token exchange successful - session stored in memory" 
@@ -53,7 +52,7 @@ export class AuthService {
       if (sessionData.expiresAt && new Date(sessionData.expiresAt).getTime() > Date.now() + 300000) {
         return sessionData.accessToken || null;
       }
-
+      
       // Refresh the token using the API service
       const tokenData = await plandayAPI.exchangeRefreshToken(sessionData.refreshToken);
       
@@ -98,3 +97,44 @@ export class AuthService {
 
 // Export a singleton instance
 export const authService = new AuthService();
+
+// MISSING FUNCTIONS FOR NEW API FILES
+
+/**
+ * Make an authenticated request to Planday API
+ * Used by the new domain-specific API files
+ */
+export async function makeAuthenticatedRequest(url: string, options: RequestInit = {}): Promise<Response> {
+  const accessToken = await authService.getValidAccessToken();
+  
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please authenticate first.');
+  }
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'X-ClientId': '4b79b7b4-932a-4a3b-9400-dcc24ece299e',
+    'Content-Type': 'application/json',
+    ...((options.headers as Record<string, string>) || {})
+  };
+
+  return fetch(url, {
+    ...options,
+    headers
+  });
+}
+
+/**
+ * Ensure user is authenticated before proceeding
+ * Used by the new tool files
+ */
+export async function ensureAuthenticated(): Promise<void> {
+  if (!authService.isAuthenticated()) {
+    throw new Error('Not authenticated. Please use the authenticate-planday tool first.');
+  }
+
+  const accessToken = await authService.getValidAccessToken();
+  if (!accessToken) {
+    throw new Error('Unable to get valid access token. Please re-authenticate using the authenticate-planday tool.');
+  }
+}

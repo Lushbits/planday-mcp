@@ -417,3 +417,17 @@ export function formatShiftOperationResult(
   
   return result;
 } 
+// ================================
+// ADDITIONAL EXPORTS (Add at the very end)
+// ================================
+
+// Re-export all functions to ensure they're available
+export {
+  formatShifts,
+  formatShiftTypes,
+  formatPositions,
+  formatSections,
+  formatScheduleDays,
+  formatSkills,
+  formatShiftOperationResult,
+};

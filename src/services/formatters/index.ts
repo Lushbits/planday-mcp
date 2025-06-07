@@ -2,8 +2,7 @@
 // Centralized exports for all domain formatters
 // Maintains backward compatibility while enabling modular imports
 
-// HR Domain Formatters (Comprehensive)
-export { 
+import { 
   formatEmployees,
   formatDeactivatedEmployees,
   formatEmployeeDetail,
@@ -20,8 +19,7 @@ export {
   formatSkillOperationResult
 } from './hr-formatters';
 
-// Scheduling Domain Formatters (Comprehensive)
-export { 
+import { 
   formatShifts, 
   formatShiftTypes, 
   formatPositions, 
@@ -33,14 +31,9 @@ export {
   formatShiftOperationResult
 } from './scheduling-formatters';
 
-// Absence Domain Formatters
-export { formatAbsenceRecords } from './absence-formatters';
-
-// Payroll Domain Formatters
-export { formatPayrollSummary, formatShiftPayrollDetails } from './payroll-formatters';
-
-// Shared Utility Formatters
-export { 
+import { formatAbsenceRecords } from './absence-formatters';
+import { formatPayrollSummary, formatShiftPayrollDetails } from './payroll-formatters';
+import { 
   formatDebugInfo, 
   formatAPIResponse, 
   formatError, 
@@ -48,7 +41,7 @@ export {
   formatAuthenticationResult 
 } from './shared-formatters';
 
-// Re-export the individual functions for direct import
+// Re-export all functions
 export {
   // HR Domain Functions
   formatEmployees,
@@ -90,18 +83,16 @@ export {
   formatAuthenticationResult
 };
 
-// Legacy DataFormatters class for backward compatibility
-// This maintains the existing API while using the new modular functions
-// MOVED TO END: Ensures all imports are resolved before class definition
-export class DataFormatters {
-  static formatShifts = formatShifts;
-  static formatEmployees = formatEmployees;
-  static formatDepartments = formatDepartments;
-  static formatAbsenceRecords = formatAbsenceRecords;
-  static formatShiftTypes = formatShiftTypes;
-  static formatDebugInfo = formatDebugInfo;
-  static formatAPIResponse = formatAPIResponse;
-  static formatError = formatError;
-  static formatSuccess = formatSuccess;
-  static formatAuthenticationResult = formatAuthenticationResult;
-} 
+// Legacy DataFormatters object for backward compatibility
+export const DataFormatters = {
+  formatShifts,
+  formatEmployees,
+  formatDepartments,
+  formatAbsenceRecords,
+  formatShiftTypes,
+  formatDebugInfo,
+  formatAPIResponse,
+  formatError,
+  formatSuccess,
+  formatAuthenticationResult
+}; 

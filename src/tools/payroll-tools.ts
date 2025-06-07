@@ -1,4 +1,5 @@
 // src/tools/payroll-tools.ts
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getPayrollData } from "../services/api/payroll-api.ts";
@@ -10,7 +11,6 @@ export function registerPayrollTools(server: McpServer) {
   // Get detailed payroll data with cost breakdown
   server.tool(
     "get-payroll-data",
-    "Get detailed payroll cost breakdown and salary information for any date range. Shows shift costs, employee wages, supplements, breaks, and total labor expenses. Perfect for questions like: 'What did our payroll cost last week?', 'Show me shift costs for this month', 'What are our labor expenses by department?'",
     {
       startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01' for June 1st)"),
       endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07' for June 7th)"),
@@ -113,7 +113,6 @@ export function registerPayrollTools(server: McpServer) {
   // Get payroll summary for quick cost overview
   server.tool(
     "get-payroll-summary",
-    "Get quick payroll cost summary showing total labor expenses and employee count for any date range. Fast overview of labor costs without detailed breakdowns. Perfect for questions like: 'What did labor cost this week?', 'How much are we spending on payroll?', 'Quick cost summary for last month'",
     {
       startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01' for June 1st)"),
       endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07' for June 7th)")

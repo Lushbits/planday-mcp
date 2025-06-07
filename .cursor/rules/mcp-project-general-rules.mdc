@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Always use principles in [tool-best-practice.md](mdc:docs/tool-best-practice.md) when building tools
+
+
+Don't guess about Planday API documentation, ask the user to provide the correct documentation if uncertain

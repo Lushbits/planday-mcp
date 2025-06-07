@@ -4,10 +4,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Import all tool registration functions
 import { registerAuthTools } from './tools/auth-tools.ts';
-import { registerEmployeeTools } from './tools/employee-tools.ts';
-import { registerShiftTools } from './tools/shift-tools.ts';
+import { registerHRTools } from './tools/hr-tools.ts';
+import { registerSchedulingTools } from './tools/scheduling-tools.ts'; // COMPREHENSIVE SCHEDULING
 import { registerAbsenceTools } from './tools/absence-tools.ts';
-import { registerPayrollTools } from './tools/payroll-tools.ts'; // NEW!
+import { registerPayrollTools } from './tools/payroll-tools.ts';
 
 // Define our Planday MCP agent
 export class MyMCP extends McpAgent {
@@ -18,14 +18,21 @@ export class MyMCP extends McpAgent {
 
 	async init() {
 		// Register all tool categories
-		registerAuthTools(this.server);      // Authentication & debug tools
-		registerEmployeeTools(this.server);  // HR management tools
-		registerShiftTools(this.server);     // Scheduling tools
-		registerAbsenceTools(this.server);   // Absence management tools
-		registerPayrollTools(this.server);   // Payroll & cost analysis tools (NEW!)
+		registerAuthTools(this.server);          // Authentication & debug tools
+		registerHRTools(this.server);            // HR management tools
+		registerSchedulingTools(this.server);    // COMPREHENSIVE SCHEDULING (18 tools across 8 domains)
+		registerAbsenceTools(this.server);       // Absence management tools
+		registerPayrollTools(this.server);       // Payroll & cost analysis tools
 		
-		console.log("🚀 Planday MCP Server initialized with ALL tools: auth + employees + shifts + absence + payroll!");
-		console.log("📊 NEW: Payroll cost analysis and labor expense tracking added!");
+		console.log("🚀 Planday MCP Server initialized with COMPREHENSIVE HR & SCHEDULING!");
+		console.log("👥 ENHANCED: Complete HR management suite - 25 tools across 7 domains:");
+		console.log("  • Employee Management (12 tools): CRUD, activate/deactivate, history, custom fields");
+		console.log("  • Departments (5 tools): create, read, update, delete, assign employees");
+		console.log("  • Employee Groups (5 tools): organize workforce categories");
+		console.log("  • Skills & Types (4 tools): competency tracking & employment classification");
+		console.log("📅 COMPREHENSIVE: Complete scheduling suite - 18 tools across 8 domains:");
+		console.log("  • Full workforce lifecycle from hire to payroll approval");
+		console.log("  • Total: 49 tools across 5 business domains (Auth, HR, Scheduling, Absence, Payroll)");
 	}
 }
 

@@ -1,5 +1,5 @@
 // src/services/api/absence-api.ts
-import { makeAuthenticatedRequest } from "../auth.ts";
+import { makeAuthenticatedRequest } from "../auth";
 
 // Absence API Types (moved from planday-api.ts)
 export interface AbsenceRecord {

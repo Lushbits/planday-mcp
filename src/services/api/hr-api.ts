@@ -1,5 +1,5 @@
 // src/services/api/hr-api.ts
-import { makeAuthenticatedRequest } from "../auth.ts";
+import { makeAuthenticatedRequest } from "../auth";
 
 // =============================================================================
 // COMPREHENSIVE HR API TYPE DEFINITIONS

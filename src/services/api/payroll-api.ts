@@ -1,6 +1,6 @@
 // src/services/api/payroll-api.ts
-import { makeAuthenticatedRequest } from "../auth.ts";
-import { getDepartments } from "./hr-api.ts";
+import { makeAuthenticatedRequest } from "../auth";
+import { getDepartments } from "./hr-api";
 
 // Payroll API Types (based on actual API spec)
 export interface PayrollShift {

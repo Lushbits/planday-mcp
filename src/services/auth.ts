@@ -1,5 +1,4 @@
 // src/services/auth.ts
-import { plandayAPI } from './planday-api.ts';
 
 export interface PlandayTokens {
   refreshToken: string;
@@ -10,6 +9,9 @@ export interface PlandayTokens {
 
 export class AuthService {
   private static readonly SESSION_KEY = 'plandaySession';
+  private static readonly BASE_URL = 'https://openapi.planday.com';
+  private static readonly AUTH_URL = 'https://id.planday.com';
+  private static readonly CLIENT_ID = '4b79b7b4-932a-4a3b-9400-dcc24ece299e';
 
   async authenticatePlanday(refreshToken: string): Promise<{
     success: boolean;
@@ -17,8 +19,8 @@ export class AuthService {
     error?: string;
   }> {
     try {
-      // Test token exchange using the API service
-      const tokenData = await plandayAPI.exchangeRefreshToken(refreshToken);
+      // Test token exchange using our internal method
+      const tokenData = await this.exchangeRefreshToken(refreshToken);
       
       // Store session data in globalThis (same as your current implementation)
       this.setSession({
@@ -53,8 +55,8 @@ export class AuthService {
         return sessionData.accessToken || null;
       }
       
-      // Refresh the token using the API service
-      const tokenData = await plandayAPI.exchangeRefreshToken(sessionData.refreshToken);
+      // Refresh the token using our internal method
+      const tokenData = await this.exchangeRefreshToken(sessionData.refreshToken);
       
       // Update session data
       sessionData.accessToken = tokenData.access_token;
@@ -83,6 +85,31 @@ export class AuthService {
     return this.getSession();
   }
 
+  // Token exchange method (moved from PlandayAPIService)
+  async exchangeRefreshToken(refreshToken: string): Promise<{
+    access_token: string;
+    expires_in: number;
+    token_type: string;
+  }> {
+    const response = await fetch(`${AuthService.AUTH_URL}/connect/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: AuthService.CLIENT_ID,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
   // Private methods
   private getSession(): PlandayTokens | undefined {
     // @ts-ignore - Get session from globalThis (same as your current implementation)
@@ -98,7 +125,7 @@ export class AuthService {
 // Export a singleton instance
 export const authService = new AuthService();
 
-// MISSING FUNCTIONS FOR NEW API FILES
+// FUNCTIONS FOR NEW API FILES
 
 /**
  * Make an authenticated request to Planday API

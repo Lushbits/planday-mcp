@@ -1,122 +1,115 @@
-// src/tools/payroll-tools.ts
+// src/tools/payroll-tools.ts - Fixed payroll tools with correct API parameters
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getPayrollWithDepartmentBreakdown, getPayrollData } from "../services/api/payroll-api";
-import { getEmployeesByIds } from "../services/api/hr-api";
-import { formatPayrollSummary, formatShiftPayrollDetails } from "../services/formatters";
-import { ensureAuthenticated } from "../services/auth";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { authService, makeAuthenticatedRequest } from '../services/auth';
+import { DataFormatters } from '../services/formatters';
+
+/**
+ * Get all department IDs for payroll queries
+ * The Planday payroll API requires departmentIds as a mandatory parameter
+ */
+async function getAllDepartmentIds(): Promise<number[]> {
+  try {
+    const response = await makeAuthenticatedRequest('https://openapi.planday.com/hr/v1.0/departments');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch departments: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json() as any;
+    return data.data?.map((dept: any) => dept.id) || [];
+  } catch (error) {
+    console.error('Error fetching departments for payroll:', error);
+    return [];
+  }
+}
 
 export function registerPayrollTools(server: McpServer) {
   // Get detailed payroll data with cost breakdown
   server.tool(
     "get-payroll-data",
     {
-      startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01' for June 1st)"),
-      endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07' for June 7th)"),
+      startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01')"),
+      endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07')"),
+      departmentIds: z.array(z.number()).optional().describe("Specific department IDs to include (if not provided, includes all departments)"),
       includeDetails: z.boolean().optional().describe("Include detailed breakdown per shift and employee (default: false for summary only)"),
       onlyApproved: z.boolean().optional().describe("Only include approved shifts for final payroll processing (default: false shows ALL scheduled shifts for budget planning)")
     },
-    async ({ startDate, endDate, includeDetails = false, onlyApproved = false }) => {
+    async ({ startDate, endDate, departmentIds, includeDetails = false, onlyApproved = false }) => {
       try {
-        await ensureAuthenticated();
-
-        // Use the enhanced function that includes department breakdown
-        const result = await getPayrollWithDepartmentBreakdown(startDate, endDate, {
-          shiftStatus: onlyApproved ? 'Approved' : undefined
-        });
-
-        const { payrollData, departmentBreakdown, totals } = result;
-        
-        if (!payrollData || (!payrollData.shiftsPayroll?.length && !payrollData.supplementsPayroll?.length && !payrollData.salariedPayroll?.length)) {
+        const accessToken = await authService.getValidAccessToken();
+        if (!accessToken) {
           return {
             content: [{
               type: "text",
-              text: `📊 No payroll data found for period ${startDate} to ${endDate}${onlyApproved ? ' (approved shifts only for payroll)' : ' (all scheduled shifts)'}`
+              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
             }]
           };
         }
 
-        // Get employee data for name resolution
-        const employeeIds = new Set([
-          ...(payrollData.shiftsPayroll?.map(s => s.employeeId) || []),
-          ...(payrollData.supplementsPayroll?.map(s => s.employeeId) || []),
-          ...(payrollData.salariedPayroll?.map(s => s.employeeId) || [])
-        ]);
+        // Get department IDs - required by the API
+        let deptIds = departmentIds;
+        if (!deptIds || deptIds.length === 0) {
+          deptIds = await getAllDepartmentIds();
+          if (deptIds.length === 0) {
+            return {
+              content: [{
+                type: "text",
+                text: "❌ No departments found. Cannot fetch payroll data without department IDs."
+              }]
+            };
+          }
+        }
 
-        const employeesMap = await getEmployeesByIds(Array.from(employeeIds));
+        // Build query parameters according to API spec
+        const params = new URLSearchParams({
+          from: startDate,  // API expects 'from', not 'startDate'
+          to: endDate,      // API expects 'to', not 'endDate'
+          departmentIds: deptIds.join(',') // Required: comma-separated list
+        });
+
+        // Add optional parameters
+        if (onlyApproved) {
+          params.append('shiftStatus', 'Approved'); // API expects 'shiftStatus', not 'status'
+        }
+
+        // Use correct payroll API URL
+        const url = `https://openapi.planday.com/payroll/v1.0/payroll?${params.toString()}`;
+        const response = await makeAuthenticatedRequest(url);
         
-        // Convert to name map for formatter
-        const employeeNames = new Map<number, string>();
-        employeesMap.forEach((employee, id) => {
-          const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || `Employee ${id}`;
-          employeeNames.set(id, fullName);
-        });
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json() as any;
 
-        // Convert department breakdown to name map for formatter
-        const departmentNames = new Map<number, string>();
-        departmentBreakdown.forEach(dept => {
-          departmentNames.set(dept.departmentId, dept.departmentName);
-        });
-
-        if (includeDetails) {
-          // Detailed breakdown
-          const detailedOutput = formatShiftPayrollDetails(
-            payrollData, 
-            employeeNames, 
-            departmentNames, 
-            startDate, 
-            endDate
-          );
+        // Check if data exists (API returns data directly, not wrapped in 'data' property)
+        if (!data || (!data.shiftsPayroll?.length && !data.supplementsPayroll?.length && !data.salariedPayroll?.length)) {
           return {
             content: [{
               type: "text",
-              text: detailedOutput + (onlyApproved ? '\n\n✅ *Showing approved shifts only - ready for payroll processing*' : '\n\n📋 *Showing all scheduled shifts - perfect for budget planning*')
-            }]
-          };
-        } else {
-          // Summary with enhanced department breakdown
-          let summaryOutput = formatPayrollSummary(
-            payrollData, 
-            employeeNames, 
-            departmentNames, 
-            startDate, 
-            endDate
-          );
-
-          // Add enhanced department cost breakdown
-          if (departmentBreakdown.length > 0) {
-            summaryOutput += '\n\n🏢 **Enhanced Department Breakdown**:\n';
-            departmentBreakdown
-              .sort((a, b) => b.totalCost - a.totalCost)
-              .forEach((dept, index) => {
-                const percentage = totals.totalCost > 0 ? ((dept.totalCost / totals.totalCost) * 100).toFixed(1) : '0.0';
-                summaryOutput += `${index + 1}. **${dept.departmentName}**: ${totals.currency}${dept.totalCost.toFixed(2)} (${percentage}% of total, ${dept.employeeCount} employees)\n`;
-              });
-          }
-
-          if (onlyApproved) {
-            summaryOutput += '\n\n✅ *Showing approved shifts only - ready for payroll processing*';
-          } else {
-            summaryOutput += '\n\n📋 *Showing all scheduled shifts - perfect for budget planning and cost estimation*';
-          }
-
-          return {
-            content: [{
-              type: "text",
-              text: summaryOutput
+              text: `📊 No payroll data found for period ${startDate} to ${endDate}${onlyApproved ? ' (approved shifts only)' : ' (all scheduled shifts)'}`
             }]
           };
         }
 
-      } catch (error) {
-        console.error("Error getting payroll data:", error);
+        const formattedData = DataFormatters.formatAPIResponse(
+          includeDetails ? "payroll-details" : "payroll-summary", 
+          data
+        );
+
         return {
           content: [{
             type: "text",
-            text: `❌ Error retrieving payroll data: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }],
-          isError: true
+            text: formattedData + (onlyApproved ? '\n\n✅ *Showing approved shifts only - ready for payroll processing*' : '\n\n📋 *Showing all scheduled shifts - perfect for budget planning*')
+          }]
+        };
+
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: DataFormatters.formatError("retrieving payroll data", error)
+          }]
         };
       }
     }
@@ -126,70 +119,87 @@ export function registerPayrollTools(server: McpServer) {
   server.tool(
     "get-payroll-summary",
     {
-      startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01' for June 1st)"),
-      endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07' for June 7th)"),
+      startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01')"),
+      endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07')"),
+      departmentIds: z.array(z.number()).optional().describe("Specific department IDs to include (if not provided, includes all departments)"),
       onlyApproved: z.boolean().optional().describe("Only include approved shifts for final payroll amounts (default: false shows ALL scheduled shifts for cost planning)")
     },
-    async ({ startDate, endDate, onlyApproved = false }) => {
+    async ({ startDate, endDate, departmentIds, onlyApproved = false }) => {
       try {
-        await ensureAuthenticated();
-
-        const payrollData = await getPayrollData(startDate, endDate, {
-          shiftStatus: onlyApproved ? 'Approved' : undefined
-        });
-        
-        if (!payrollData) {
+        const accessToken = await authService.getValidAccessToken();
+        if (!accessToken) {
           return {
             content: [{
               type: "text",
-              text: `📊 No payroll data found for period ${startDate} to ${endDate}${onlyApproved ? ' (approved shifts only for payroll)' : ' (all scheduled shifts)'}`
+              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
             }]
           };
         }
 
-        // Calculate totals
-        const shiftCosts = payrollData.shiftsPayroll?.reduce((sum, shift) => sum + (shift.salary || 0), 0) || 0;
-        const supplementCosts = payrollData.supplementsPayroll?.reduce((sum, supp) => sum + (supp.salary || 0), 0) || 0;
-        const salariedCosts = payrollData.salariedPayroll?.reduce((sum, sal) => sum + (sal.salary || 0), 0) || 0;
-        
-        const totalCost = shiftCosts + supplementCosts + salariedCosts;
-        const currency = payrollData.currencySymbol || '$';
-        
-        const uniqueEmployees = new Set([
-          ...(payrollData.shiftsPayroll?.map(s => s.employeeId) || []),
-          ...(payrollData.supplementsPayroll?.map(s => s.employeeId) || []),
-          ...(payrollData.salariedPayroll?.map(s => s.employeeId) || [])
-        ]).size;
+        // Get department IDs - required by the API
+        let deptIds = departmentIds;
+        if (!deptIds || deptIds.length === 0) {
+          deptIds = await getAllDepartmentIds();
+          if (deptIds.length === 0) {
+            return {
+              content: [{
+                type: "text",
+                text: "❌ No departments found. Cannot fetch payroll data without department IDs."
+              }]
+            };
+          }
+        }
 
-        const dayCount = Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)));
+        // Build query parameters according to API spec
+        const params = new URLSearchParams({
+          from: startDate,  // API expects 'from'
+          to: endDate,      // API expects 'to'
+          departmentIds: deptIds.join(',') // Required parameter
+        });
+
+        // Add optional parameters
+        if (onlyApproved) {
+          params.append('shiftStatus', 'Approved');
+        }
+
+        // Use correct payroll API URL
+        const url = `https://openapi.planday.com/payroll/v1.0/payroll?${params.toString()}`;
+        const response = await makeAuthenticatedRequest(url);
+        
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json() as any;
+
+        // Check if data exists
+        if (!data || (!data.shiftsPayroll?.length && !data.supplementsPayroll?.length && !data.salariedPayroll?.length)) {
+          return {
+            content: [{
+              type: "text",
+              text: `📊 No payroll data found for period ${startDate} to ${endDate}${onlyApproved ? ' (approved shifts only)' : ' (all scheduled shifts)'}`
+            }]
+          };
+        }
 
         return {
           content: [{
             type: "text",
-            text: `💰 Payroll Summary (${startDate} to ${endDate})
-
-📊 Total Labor Cost: ${currency}${totalCost.toFixed(2)}
-👥 Employees Paid: ${uniqueEmployees}
-📅 Period: ${dayCount} days
-⏰ Daily Average: ${currency}${(totalCost / dayCount).toFixed(2)}
-
-💼 Breakdown:
-• Shift Wages: ${currency}${shiftCosts.toFixed(2)} (${payrollData.shiftsPayroll?.length || 0} shifts)
-• Supplements: ${currency}${supplementCosts.toFixed(2)} (${payrollData.supplementsPayroll?.length || 0} items)
-• Salaries: ${currency}${salariedCosts.toFixed(2)} (${payrollData.salariedPayroll?.length || 0} items)${onlyApproved ? '\n\n✅ *Showing approved shifts only - ready for payroll processing*' : '\n\n📋 *Showing all scheduled shifts - perfect for cost planning and budgeting*'}`
+            text: DataFormatters.formatAPIResponse(
+              "payroll-summary", 
+              data
+            ) + (onlyApproved ? '\n\n✅ *Showing approved shifts only - ready for payroll processing*' : '\n\n📋 *Showing all scheduled shifts - perfect for cost planning and budgeting*')
           }]
         };
 
       } catch (error) {
-        console.error("Error getting payroll summary:", error);
         return {
           content: [{
             type: "text",
-            text: `❌ Error retrieving payroll summary: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }],
-          isError: true
+            text: DataFormatters.formatError("retrieving payroll summary", error)
+          }]
         };
       }
     }
   );
-}
+} 

@@ -36,9 +36,9 @@ export function formatPayrollSummary(
 
   // Detailed breakdown by payroll type
   result += `💼 **Cost Breakdown**:\n`;
-  result += `• **Shift Wages**: ${currency}${totals.shiftsCost.toFixed(2)} (${payrollData.shiftsPayroll?.length || 0} shifts)\n`;
-  result += `• **Supplements**: ${currency}${totals.supplementsCost.toFixed(2)} (${payrollData.supplementsPayroll?.length || 0} items)\n`;
-  result += `• **Salaries**: ${currency}${totals.salariedCost.toFixed(2)} (${payrollData.salariedPayroll?.length || 0} items)\n\n`;
+  result += `• **Shift Wages**: ${currency}${totals.shiftCosts.toFixed(2)} (${payrollData.shiftsPayroll?.length || 0} shifts)\n`;
+  result += `• **Supplements**: ${currency}${totals.supplementCosts.toFixed(2)} (${payrollData.supplementsPayroll?.length || 0} items)\n`;
+  result += `• **Salaries**: ${currency}${totals.salariedCosts.toFixed(2)} (${payrollData.salariedPayroll?.length || 0} items)\n\n`;
 
   // Employee-level breakdown (top contributors)
   const employeeGroups = groupPayrollByEmployee(payrollData);
@@ -86,7 +86,7 @@ export function formatShiftPayrollDetails(
       
       result += `${index + 1}. **${employeeName}** (${departmentName})\n`;
       result += `   📅 Date: ${shift.date}\n`;
-      result += `   ⏰ ${shift.startTime} - ${shift.endTime}\n`;
+      result += `   ⏰ ${shift.start} - ${shift.end}\n`;
       result += `   💰 Pay: ${currency}${(shift.salary || 0).toFixed(2)}\n`;
       if (shift.shiftTypeId) {
         result += `   🏷️ Shift Type ID: ${shift.shiftTypeId}\n`;
@@ -105,9 +105,7 @@ export function formatShiftPayrollDetails(
       result += `${index + 1}. **${employeeName}**\n`;
       result += `   📅 Date: ${supplement.date}\n`;
       result += `   💰 Amount: ${currency}${(supplement.salary || 0).toFixed(2)}\n`;
-      if (supplement.note) {
-        result += `   📝 Note: ${supplement.note}\n`;
-      }
+      result += `   🏷️ Code: ${supplement.salaryCode}\n`;
       result += '\n';
     });
   }
@@ -120,7 +118,7 @@ export function formatShiftPayrollDetails(
       const employeeName = employeeNames.get(salary.employeeId) || `Employee ${salary.employeeId}`;
       
       result += `${index + 1}. **${employeeName}**\n`;
-      result += `   📅 Period: ${salary.startDate} - ${salary.endDate}\n`;
+      result += `   📅 Period: ${salary.start} - ${salary.end}\n`;
       result += `   💰 Amount: ${currency}${(salary.salary || 0).toFixed(2)}\n`;
       result += '\n';
     });

@@ -1,6 +1,6 @@
 // src/services/api/payroll-api.ts
 import { makeAuthenticatedRequest } from "../auth";
-import { getDepartments } from "./hr-api";
+import { getDepartments, type Department } from "./hr-api";
 
 // Payroll API Types (based on actual API spec)
 export interface PayrollShift {
@@ -95,7 +95,7 @@ export async function getPayrollData(
   if (!departmentIds || departmentIds.length === 0) {
     try {
       const allDepartments = await getDepartments();
-      departmentIds = allDepartments.map(dept => dept.id);
+      departmentIds = allDepartments.data.map((dept: Department) => dept.id);
       
       if (departmentIds.length === 0) {
         throw new Error('No departments found in the portal');
@@ -131,7 +131,7 @@ export async function getPayrollData(
   const result = await response.json();
   
   // API returns data directly (not wrapped in 'data' property based on spec)
-  return result;
+  return result as PayrollData;
 }
 
 /**
@@ -271,7 +271,7 @@ export async function getPayrollWithDepartmentBreakdown(
   
   // Get department details for name resolution
   const departments = await getDepartments();
-  const departmentMap = new Map(departments.map(dept => [dept.id, dept.name]));
+  const departmentMap = new Map(departments.data.map((dept: Department) => [dept.id, dept.name]));
   
   // Group by department
   const departmentBreakdown = groupPayrollByDepartment(payrollData);

@@ -1,11 +1,12 @@
-// src/index.ts - Full version with all tools including payroll
+// src/index.ts - Working version with auth + employee + scheduling + absence + payroll tools
+
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-// Import all tool registration functions
+// Import working tool files
 import { registerAuthTools } from './tools/auth-tools';
-import { registerHRTools } from './tools/hr-tools';
-import { registerSchedulingTools } from './tools/scheduling-tools'; // COMPREHENSIVE SCHEDULING
+import { registerEmployeeTools } from './tools/employee-tools';
+import { registerSchedulingTools } from './tools/scheduling-tools';
 import { registerAbsenceTools } from './tools/absence-tools';
 import { registerPayrollTools } from './tools/payroll-tools';
 
@@ -13,26 +14,18 @@ import { registerPayrollTools } from './tools/payroll-tools';
 export class MyMCP extends McpAgent {
 	server = new McpServer({
 		name: "Planday Integration",
-		version: "2.0.0",
+		version: "1.0.0",
 	});
 
 	async init() {
-		// Register all tool categories
-		registerAuthTools(this.server);          // Authentication & debug tools
-		registerHRTools(this.server);            // HR management tools
-		registerSchedulingTools(this.server);    // COMPREHENSIVE SCHEDULING (18 tools across 8 domains)
-		registerAbsenceTools(this.server);       // Absence management tools
-		registerPayrollTools(this.server);       // Payroll & cost analysis tools
+		// Register working tools
+		registerAuthTools(this.server);
+		registerEmployeeTools(this.server);
+		registerSchedulingTools(this.server);
+		registerAbsenceTools(this.server);
+		registerPayrollTools(this.server);
 		
-		console.log("🚀 Planday MCP Server initialized with COMPREHENSIVE HR & SCHEDULING!");
-		console.log("👥 ENHANCED: Complete HR management suite - 25 tools across 7 domains:");
-		console.log("  • Employee Management (12 tools): CRUD, activate/deactivate, history, custom fields");
-		console.log("  • Departments (5 tools): create, read, update, delete, assign employees");
-		console.log("  • Employee Groups (5 tools): organize workforce categories");
-		console.log("  • Skills & Types (4 tools): competency tracking & employment classification");
-		console.log("📅 COMPREHENSIVE: Complete scheduling suite - 18 tools across 8 domains:");
-		console.log("  • Full workforce lifecycle from hire to payroll approval");
-		console.log("  • Total: 49 tools across 5 business domains (Auth, HR, Scheduling, Absence, Payroll)");
+		console.log("🚀 Planday MCP Server working with auth + employees + scheduling + absence + payroll!");
 	}
 }
 

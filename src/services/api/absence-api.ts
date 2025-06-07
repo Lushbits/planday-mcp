@@ -1,35 +1,44 @@
 // src/services/api/absence-api.ts
 import { makeAuthenticatedRequest } from "../auth";
 
-// Absence API Types (moved from planday-api.ts)
+// Absence API Types (based on actual API spec)
 export interface AbsenceRecord {
   id: number;
   employeeId: number;
-  startDate: string;
-  endDate: string;
-  status: 'Pending' | 'Approved' | 'Declined' | 'Cancelled';
+  status: 'Declined' | 'Approved'; // API only supports these two statuses
   note?: string;
-  cost?: number;
-  absenceType?: {
-    id: number;
-    name: string;
+  absencePeriod: {
+    start: string;
+    end: string;
   };
-  employee?: {
-    id: number;
-    firstName: string;
-    lastName: string;
-  };
+  registrations?: Array<{
+    date: string;
+    time: {
+      start: string;
+      end: string;
+    };
+    account: {
+      id: number;
+      costs: Array<{
+        value: number;
+        unit: {
+          type: string;
+        };
+      }>;
+    };
+  }>;
 }
 
 export interface AbsenceRecordParams {
   employeeId?: number;
   startDate?: string;
   endDate?: string;
-  status?: 'Pending' | 'Approved' | 'Declined' | 'Cancelled';
+  statuses?: ('Declined' | 'Approved')[]; // Updated to match API spec
 }
 
 /**
  * Get absence records with optional filtering
+ * Uses the correct absence API endpoint
  */
 export async function getAbsenceRecords(params: AbsenceRecordParams = {}): Promise<AbsenceRecord[]> {
   const queryParams = new URLSearchParams();
@@ -37,16 +46,20 @@ export async function getAbsenceRecords(params: AbsenceRecordParams = {}): Promi
   if (params.employeeId) queryParams.append('employeeId', params.employeeId.toString());
   if (params.startDate) queryParams.append('startDate', params.startDate);
   if (params.endDate) queryParams.append('endDate', params.endDate);
-  if (params.status) queryParams.append('status', params.status);
+  if (params.statuses && params.statuses.length > 0) {
+    // API expects multiple statuses parameters
+    params.statuses.forEach(status => queryParams.append('statuses', status));
+  }
 
-  const url = `https://openapi.planday.com/absence/v1/absencerecords?${queryParams.toString()}`;
+  // Use correct API URL with v1.0
+  const url = `https://openapi.planday.com/absence/v1.0/absencerecords?${queryParams.toString()}`;
   const response = await makeAuthenticatedRequest(url);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch absence records: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as any;
   return data.data || [];
 }
 
@@ -55,7 +68,8 @@ export async function getAbsenceRecords(params: AbsenceRecordParams = {}): Promi
  */
 export async function getAbsenceRecord(recordId: number): Promise<AbsenceRecord | null> {
   try {
-    const url = `https://openapi.planday.com/absence/v1/absencerecords/${recordId}`;
+    // Use correct API URL with v1.0
+    const url = `https://openapi.planday.com/absence/v1.0/absencerecords/${recordId}`;
     const response = await makeAuthenticatedRequest(url);
 
     if (!response.ok) {
@@ -71,8 +85,21 @@ export async function getAbsenceRecord(recordId: number): Promise<AbsenceRecord 
 }
 
 /**
- * Get pending absence requests (convenience method)
+ * Get approved absence requests (convenience method)
  */
-export async function getPendingAbsenceRequests(): Promise<AbsenceRecord[]> {
-  return getAbsenceRecords({ status: 'Pending' });
+export async function getApprovedAbsenceRequests(params: { startDate?: string; endDate?: string } = {}): Promise<AbsenceRecord[]> {
+  return getAbsenceRecords({ 
+    ...params,
+    statuses: ['Approved'] 
+  });
+}
+
+/**
+ * Get declined absence requests (convenience method)
+ */
+export async function getDeclinedAbsenceRequests(params: { startDate?: string; endDate?: string } = {}): Promise<AbsenceRecord[]> {
+  return getAbsenceRecords({ 
+    ...params,
+    statuses: ['Declined'] 
+  });
 }

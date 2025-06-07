@@ -1,7 +1,7 @@
 // src/services/formatters/payroll-formatters.ts
 // Payroll Domain Formatters - Payroll & Cost Analysis data formatting
 
-import { PayrollData, calculatePayrollTotals, groupPayrollByEmployee, groupPayrollByDepartment } from "../api/payroll-api.ts";
+import { PayrollData, calculatePayrollTotals, groupPayrollByEmployee, groupPayrollByDepartment } from "../api/payroll-api";
 
 /**
  * Format comprehensive payroll summary with department breakdown

@@ -1,6 +1,7 @@
 // src/services/formatters.ts
 
-import type { PlandayShift, PlandayEmployee, PlandayDepartment, PlandayAbsenceRecord, PlandayShiftType } from './planday-api.js';
+import type { PlandayShift, PlandayEmployee, PlandayDepartment, PlandayAbsenceRecord, PlandayShiftType } from './planday-api.ts';
+import { PayrollData, calculatePayrollTotals, groupPayrollByEmployee, groupPayrollByDepartment } from "./api/payroll-api.ts";
 
 export class DataFormatters {
   
@@ -214,4 +215,162 @@ export class DataFormatters {
       ? `✅ Successfully connected to Planday portal: ${portalName}`
       : `❌ Authentication failed: ${error}`;
   }
+}
+
+// NEW PAYROLL FORMATTING FUNCTIONS
+
+/**
+ * Format payroll summary with totals and basic breakdown
+ */
+export function formatPayrollSummary(
+  payrollData: PayrollData,
+  employeeNames: Map<number, string>,
+  departmentNames: Map<number, string>,
+  startDate: string,
+  endDate: string
+): string {
+  const totals = calculatePayrollTotals(payrollData);
+  const employeeGroups = groupPayrollByEmployee(payrollData);
+  const departmentGroups = groupPayrollByDepartment(payrollData);
+
+  const dayCount = Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)));
+
+  let output = `💰 Payroll Summary (${startDate} to ${endDate})\n\n`;
+  
+  output += `📊 **Total Labor Cost**: ${totals.currency}${totals.totalCost.toFixed(2)}\n`;
+  output += `👥 **Employees Paid**: ${employeeGroups.length}\n`;
+  output += `📅 **Period**: ${dayCount} days\n`;
+  output += `⏰ **Daily Average**: ${totals.currency}${(totals.totalCost / dayCount).toFixed(2)}\n\n`;
+
+  // Cost breakdown
+  output += `💼 **Cost Breakdown**:\n`;
+  output += `• Shift Wages: ${totals.currency}${totals.shiftCosts.toFixed(2)} (${payrollData.shiftsPayroll?.length || 0} shifts)\n`;
+  output += `• Supplements: ${totals.currency}${totals.supplementCosts.toFixed(2)} (${payrollData.supplementsPayroll?.length || 0} items)\n`;
+  output += `• Salaries: ${totals.currency}${totals.salariedCosts.toFixed(2)} (${payrollData.salariedPayroll?.length || 0} items)\n\n`;
+
+  // Top employees by cost
+  if (employeeGroups.length > 0) {
+    const topEmployees = employeeGroups
+      .sort((a, b) => b.totalCost - a.totalCost)
+      .slice(0, 5);
+
+    output += `🏆 **Top Employees by Cost**:\n`;
+    topEmployees.forEach((emp, index) => {
+      const name = employeeNames.get(emp.employeeId) || `Employee ${emp.employeeId}`;
+      output += `${index + 1}. ${name}: ${totals.currency}${emp.totalCost.toFixed(2)}\n`;
+    });
+    output += '\n';
+  }
+
+  // Department breakdown
+  if (departmentGroups.length > 0) {
+    output += `🏢 **Department Costs**:\n`;
+    departmentGroups
+      .sort((a, b) => b.totalCost - a.totalCost)
+      .forEach(dept => {
+        const name = departmentNames.get(dept.departmentId) || `Department ${dept.departmentId}`;
+        output += `• ${name}: ${totals.currency}${dept.totalCost.toFixed(2)} (${dept.employeeCount} employees)\n`;
+      });
+  }
+
+  return output;
+}
+
+/**
+ * Format detailed payroll breakdown with shift-by-shift details
+ */
+export function formatShiftPayrollDetails(
+  payrollData: PayrollData,
+  employeeNames: Map<number, string>,
+  departmentNames: Map<number, string>,
+  startDate: string,
+  endDate: string
+): string {
+  const totals = calculatePayrollTotals(payrollData);
+
+  let output = `💰 Detailed Payroll Report (${startDate} to ${endDate})\n\n`;
+  
+  output += `📊 **Summary**: ${totals.currency}${totals.totalCost.toFixed(2)} total cost\n\n`;
+
+  // Shift details
+  if (payrollData.shiftsPayroll && payrollData.shiftsPayroll.length > 0) {
+    output += `📅 **Shift Details** (${payrollData.shiftsPayroll.length} shifts):\n\n`;
+
+    const shiftsByDate = payrollData.shiftsPayroll
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    shiftsByDate.forEach((shift, index) => {
+      const employeeName = employeeNames.get(shift.employeeId) || `Employee ${shift.employeeId}`;
+      const departmentName = departmentNames.get(shift.departmentId) || `Department ${shift.departmentId}`;
+      
+      const startTime = new Date(shift.start).toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+      const endTime = new Date(shift.end).toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+
+      output += `${index + 1}. **${employeeName}**\n`;
+      output += `   🏢 ${departmentName}\n`;
+      output += `   📅 ${shift.date}\n`;
+      output += `   ⏰ ${startTime} - ${endTime} (${shift.shiftDuration})\n`;
+      output += `   💵 Wage Rate: ${totals.currency}${shift.wage.rate}/${shift.wage.type.toLowerCase()}\n`;
+      output += `   💰 Total Cost: ${totals.currency}${shift.salary.toFixed(2)}\n`;
+      
+      // Show supplements if any
+      if (shift.supplements && shift.supplements.length > 0) {
+        output += `   🏷️ Supplements: ${shift.supplements.map(s => s.name).join(', ')}\n`;
+      }
+      
+      // Show breaks if any
+      if (shift.breaks && shift.breaks.length > 0) {
+        const paidBreaks = shift.breaks.filter(b => b.isPaid);
+        const unpaidBreaks = shift.breaks.filter(b => !b.isPaid);
+        if (paidBreaks.length > 0) {
+          output += `   ☕ Paid Breaks: ${paidBreaks.length}\n`;
+        }
+        if (unpaidBreaks.length > 0) {
+          output += `   ⏸️ Unpaid Breaks: ${unpaidBreaks.length}\n`;
+        }
+      }
+      
+      output += '\n';
+    });
+  }
+
+  // Supplements details
+  if (payrollData.supplementsPayroll && payrollData.supplementsPayroll.length > 0) {
+    output += `🏷️ **Supplements** (${payrollData.supplementsPayroll.length} items):\n\n`;
+    
+    payrollData.supplementsPayroll.forEach((supplement, index) => {
+      const employeeName = employeeNames.get(supplement.employeeId) || `Employee ${supplement.employeeId}`;
+      
+      output += `${index + 1}. **${supplement.name}** - ${employeeName}\n`;
+      output += `   📅 ${supplement.date}\n`;
+      output += `   💵 Rate: ${totals.currency}${supplement.wage.toFixed(2)}\n`;
+      output += `   📊 Units: ${supplement.units}\n`;
+      output += `   💰 Total: ${totals.currency}${supplement.salary.toFixed(2)}\n\n`;
+    });
+  }
+
+  // Salaried payroll details
+  if (payrollData.salariedPayroll && payrollData.salariedPayroll.length > 0) {
+    output += `💼 **Salaried Payroll** (${payrollData.salariedPayroll.length} items):\n\n`;
+    
+    payrollData.salariedPayroll.forEach((salary, index) => {
+      const employeeName = employeeNames.get(salary.employeeId) || `Employee ${salary.employeeId}`;
+      
+      output += `${index + 1}. **${employeeName}**\n`;
+      output += `   📅 Period: ${salary.start} to ${salary.end}\n`;
+      output += `   💵 Rate: ${totals.currency}${salary.wage.toFixed(2)}\n`;
+      output += `   📊 Units: ${salary.units}\n`;
+      output += `   💰 Total: ${totals.currency}${salary.salary.toFixed(2)}\n\n`;
+    });
+  }
+
+  return output;
 }

@@ -2,7 +2,7 @@
 // Comprehensive Planday Scheduling API Implementation
 // Covers: Shifts, Positions, Shift Types, Sections, Schedule Days, Skills, History, Time & Cost
 
-import { makeAuthenticatedRequest } from "../auth;
+import { makeAuthenticatedRequest } from "../auth";
 
 // ================================
 // TYPE DEFINITIONS

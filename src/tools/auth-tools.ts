@@ -2,9 +2,8 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { authService } from '../services/auth.js';
-import { plandayAPI } from '../services/planday-api.js';
-import { DataFormatters } from '../services/formatters.js';
+import { authService, makeAuthenticatedRequest } from '../services/auth.ts';
+import { DataFormatters } from '../services/formatters.ts';
 
 export function registerAuthTools(server: McpServer) {
   // Main authentication tool
@@ -48,7 +47,7 @@ export function registerAuthTools(server: McpServer) {
             text: `🔍 Session Debug:
 - Is Authenticated: ${isAuth}
 - Session Info: ${sessionInfo ? JSON.stringify(sessionInfo, null, 2) : 'null'}
-- Services: ✅ PlandayAPI, ✅ AuthService, ✅ DataFormatters loaded`
+- Services: ✅ AuthService, ✅ DataFormatters, ✅ Domain APIs loaded`
           }]
         };
       } catch (error) {
@@ -119,7 +118,14 @@ export function registerAuthTools(server: McpServer) {
           url = 'https://openapi.planday.com/hr/v1.0/Departments';
         }
 
-        const data = await plandayAPI.debugAPICall(accessToken, url);
+        // Use the new makeAuthenticatedRequest function directly
+        const response = await makeAuthenticatedRequest(url);
+        
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
         
         return {
           content: [{

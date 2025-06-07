@@ -416,4 +416,161 @@ export function formatShiftOperationResult(
   }
   
   return result;
+}
+
+// ================================
+// SHIFT HISTORY FORMATTING
+// ================================
+
+/**
+ * Format shift history data with chronological view of changes
+ */
+export function formatShiftHistory(
+  historyData: any[],
+  shiftId: string | number
+): string {
+  if (!historyData.length) {
+    return `📜 **Shift History (ID: ${shiftId})**\n\nNo history records found for this shift.`;
+  }
+
+  let result = `📜 **Shift History (ID: ${shiftId})**\n\n`;
+  result += `**Total Records:** ${historyData.length}\n\n`;
+
+  // Sort by timestamp (most recent first)
+  const sortedHistory = historyData.sort((a, b) => 
+    new Date(b.timestamp || b.created_at || 0).getTime() - 
+    new Date(a.timestamp || a.created_at || 0).getTime()
+  );
+
+  sortedHistory.forEach((record, index) => {
+    result += formatShiftHistoryRecord(record, index === 0);
+    result += '\n';
+  });
+
+  return result.trim();
+}
+
+/**
+ * Format individual shift history record
+ */
+function formatShiftHistoryRecord(record: any, isLatest: boolean = false): string {
+  const timestamp = record.timestamp || record.created_at;
+  const date = timestamp ? new Date(timestamp).toLocaleString() : 'Unknown time';
+  const action = record.action || record.change_type || 'Change';
+  const user = record.user_name || record.user_id || 'System';
+
+  let result = `### ${isLatest ? '🔥 Latest' : '📋'} ${action}\n`;
+  result += `📅 **When:** ${date}\n`;
+  result += `👤 **Who:** ${user}\n`;
+
+  if (record.old_value !== undefined && record.new_value !== undefined) {
+    result += `🔄 **Change:** ${record.field_name || 'Value'} changed from "${record.old_value}" to "${record.new_value}"\n`;
+  }
+
+  if (record.description || record.notes) {
+    result += `📝 **Details:** ${record.description || record.notes}\n`;
+  }
+
+  return result + '\n';
+}
+
+// ================================
+// TIME AND COST FORMATTING
+// ================================
+
+/**
+ * Format time and cost data with comprehensive breakdown
+ */
+export function formatTimeAndCost(
+  data: any,
+  startDate: string,
+  endDate: string
+): string {
+  if (!data) {
+    return `💰 **Time and Cost Analysis (${startDate} to ${endDate})**\n\nNo data available for the specified period.`;
+  }
+
+  let result = `💰 **Time and Cost Analysis (${startDate} to ${endDate})**\n\n`;
+
+  // Summary section
+  if (data.summary) {
+    result += '### 📊 Summary\n';
+    if (data.summary.total_hours) {
+      result += `⏰ **Total Hours:** ${data.summary.total_hours.toFixed(1)}h\n`;
+    }
+    if (data.summary.total_cost) {
+      result += `💵 **Total Cost:** $${data.summary.total_cost.toFixed(2)}\n`;
+    }
+    if (data.summary.average_hourly_rate) {
+      result += `📈 **Average Rate:** $${data.summary.average_hourly_rate.toFixed(2)}/hour\n`;
+    }
+    if (data.summary.shift_count) {
+      result += `📅 **Total Shifts:** ${data.summary.shift_count}\n`;
+    }
+    result += '\n';
+  }
+
+  // Breakdown by employee
+  if (data.employees && data.employees.length > 0) {
+    result += '### 👥 Breakdown by Employee\n\n';
+    data.employees.forEach((emp: any) => {
+      result += formatEmployeeTimeAndCost(emp);
+      result += '\n';
+    });
+  }
+
+  // Breakdown by department
+  if (data.departments && data.departments.length > 0) {
+    result += '### 🏢 Breakdown by Department\n\n';
+    data.departments.forEach((dept: any) => {
+      result += formatDepartmentTimeAndCost(dept);
+      result += '\n';
+    });
+  }
+
+  return result.trim();
+}
+
+/**
+ * Format employee time and cost details
+ */
+function formatEmployeeTimeAndCost(employee: any): string {
+  let result = `**👤 ${employee.name || `Employee ${employee.id}`}**\n`;
+  
+  if (employee.hours) {
+    result += `⏰ Hours: ${employee.hours.toFixed(1)}h\n`;
+  }
+  if (employee.cost) {
+    result += `💵 Cost: $${employee.cost.toFixed(2)}\n`;
+  }
+  if (employee.shifts) {
+    result += `📅 Shifts: ${employee.shifts}\n`;
+  }
+  if (employee.hourly_rate) {
+    result += `📈 Rate: $${employee.hourly_rate.toFixed(2)}/hour\n`;
+  }
+
+  return result;
+}
+
+/**
+ * Format department time and cost details
+ */
+function formatDepartmentTimeAndCost(department: any): string {
+  let result = `**🏢 ${department.name || `Department ${department.id}`}**\n`;
+  
+  if (department.hours) {
+    result += `⏰ Total Hours: ${department.hours.toFixed(1)}h\n`;
+  }
+  if (department.cost) {
+    result += `💵 Total Cost: $${department.cost.toFixed(2)}\n`;
+  }
+  if (department.employee_count) {
+    result += `👥 Employees: ${department.employee_count}\n`;
+  }
+  if (department.shift_count) {
+    result += `📅 Shifts: ${department.shift_count}\n`;
+  }
+
+  return result;
 } 

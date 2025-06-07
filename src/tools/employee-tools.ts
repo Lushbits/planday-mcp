@@ -2,9 +2,9 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { authService } from '../services/auth.js';
-import { plandayAPI } from '../services/planday-api.js';
-import { DataFormatters } from '../services/formatters.js';
+import { ensureAuthenticated } from '../services/auth.ts';
+import { getEmployees, getDepartments } from '../services/api/hr-api.ts';
+import { DataFormatters } from '../services/formatters.ts';
 
 export function registerEmployeeTools(server: McpServer) {
   // Get employees tool
@@ -15,18 +15,10 @@ export function registerEmployeeTools(server: McpServer) {
     },
     async ({ department }) => {
       try {
-        const accessToken = await authService.getValidAccessToken();
-        if (!accessToken) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
-            }]
-          };
-        }
+        await ensureAuthenticated();
 
-        const result = await plandayAPI.getEmployees(accessToken, department);
-        const formatted = DataFormatters.formatEmployees(result.data, department);
+        const employees = await getEmployees(department);
+        const formatted = DataFormatters.formatEmployees(employees, department);
         
         return {
           content: [{
@@ -51,18 +43,10 @@ export function registerEmployeeTools(server: McpServer) {
     {},
     async () => {
       try {
-        const accessToken = await authService.getValidAccessToken();
-        if (!accessToken) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ Please authenticate with Planday first using the authenticate-planday tool"
-            }]
-          };
-        }
+        await ensureAuthenticated();
 
-        const result = await plandayAPI.getDepartments(accessToken);
-        const formatted = DataFormatters.formatDepartments(result.data);
+        const departments = await getDepartments();
+        const formatted = DataFormatters.formatDepartments(departments);
         
         return {
           content: [{

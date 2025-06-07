@@ -1,7 +1,8 @@
 // src/services/api/payroll-api.ts
 import { makeAuthenticatedRequest } from "../auth.ts";
+import { getDepartments } from "./hr-api.ts";
 
-// Payroll API Types
+// Payroll API Types (based on actual API spec)
 export interface PayrollShift {
   id: number;
   employeeId: number;
@@ -75,32 +76,48 @@ export interface PayrollData {
   currencyFormatString: string;
 }
 
-export interface PayrollParams {
-  startDate: string;
-  endDate: string;
-  departmentId?: number;
-  employeeId?: number;
-}
-
 /**
  * Get detailed payroll data for a date range
+ * IMPORTANT: departmentIds is REQUIRED by the API
  */
 export async function getPayrollData(
   startDate: string, 
   endDate: string,
-  options: { departmentId?: number; employeeId?: number } = {}
+  options: { 
+    departmentIds?: number[]; 
+    shiftStatus?: 'Approved' | 'Nonapproved';
+    returnFullSalaryForMonthlyPaid?: boolean;
+  } = {}
 ): Promise<PayrollData> {
-  const params = new URLSearchParams({
-    startDate,
-    endDate,
-  });
-
-  if (options.departmentId) {
-    params.append('departmentId', options.departmentId.toString());
+  
+  // If no specific departments provided, fetch ALL departments and use their IDs
+  let departmentIds = options.departmentIds;
+  if (!departmentIds || departmentIds.length === 0) {
+    try {
+      const allDepartments = await getDepartments();
+      departmentIds = allDepartments.map(dept => dept.id);
+      
+      if (departmentIds.length === 0) {
+        throw new Error('No departments found in the portal');
+      }
+    } catch (error) {
+      throw new Error(`Failed to fetch departments for payroll query: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
-  if (options.employeeId) {
-    params.append('employeeId', options.employeeId.toString());
+  // Build query parameters according to API spec
+  const params = new URLSearchParams({
+    from: startDate,  // Correct parameter name
+    to: endDate,      // Correct parameter name
+    departmentIds: departmentIds.join(','), // Required: comma-separated list
+  });
+
+  if (options.shiftStatus) {
+    params.append('shiftStatus', options.shiftStatus);
+  }
+
+  if (options.returnFullSalaryForMonthlyPaid !== undefined) {
+    params.append('returnFullSalaryForMonthlyPaid', options.returnFullSalaryForMonthlyPaid.toString());
   }
 
   const response = await makeAuthenticatedRequest(
@@ -111,7 +128,28 @@ export async function getPayrollData(
     throw new Error(`Failed to fetch payroll data: ${response.status} ${response.statusText}`);
   }
 
-  return await response.json();
+  const result = await response.json();
+  
+  // API returns data directly (not wrapped in 'data' property based on spec)
+  return result;
+}
+
+/**
+ * Get payroll data for specific departments only
+ */
+export async function getPayrollDataByDepartments(
+  startDate: string,
+  endDate: string,
+  departmentIds: number[],
+  options: {
+    shiftStatus?: 'Approved' | 'Nonapproved';
+    returnFullSalaryForMonthlyPaid?: boolean;
+  } = {}
+): Promise<PayrollData> {
+  return getPayrollData(startDate, endDate, {
+    ...options,
+    departmentIds
+  });
 }
 
 /**
@@ -189,7 +227,7 @@ export function groupPayrollByEmployee(payrollData: PayrollData) {
 }
 
 /**
- * Group payroll data by department
+ * Group payroll data by department with proper department details
  */
 export function groupPayrollByDepartment(payrollData: PayrollData) {
   const departmentMap = new Map();
@@ -215,4 +253,38 @@ export function groupPayrollByDepartment(payrollData: PayrollData) {
     ...dept,
     employeeCount: dept.employeeCount.size
   }));
+}
+
+/**
+ * Get payroll data with enhanced department cost breakdown
+ */
+export async function getPayrollWithDepartmentBreakdown(
+  startDate: string,
+  endDate: string,
+  options: {
+    shiftStatus?: 'Approved' | 'Nonapproved';
+    returnFullSalaryForMonthlyPaid?: boolean;
+  } = {}
+) {
+  // Get payroll data for all departments
+  const payrollData = await getPayrollData(startDate, endDate, options);
+  
+  // Get department details for name resolution
+  const departments = await getDepartments();
+  const departmentMap = new Map(departments.map(dept => [dept.id, dept.name]));
+  
+  // Group by department
+  const departmentBreakdown = groupPayrollByDepartment(payrollData);
+  
+  // Add department names to the breakdown
+  const enrichedBreakdown = departmentBreakdown.map(dept => ({
+    ...dept,
+    departmentName: departmentMap.get(dept.departmentId) || `Department ${dept.departmentId}`
+  }));
+  
+  return {
+    payrollData,
+    departmentBreakdown: enrichedBreakdown,
+    totals: calculatePayrollTotals(payrollData)
+  };
 }

@@ -32,7 +32,8 @@ export function formatShifts(
   // Group shifts by date for better organization
   const shiftsByDate = new Map<string, any[]>();
   shifts.forEach(shift => {
-    const date = shift.start_time.split('T')[0];
+    // Use correct field name from Planday API (startDateTime instead of start_time)
+    const date = shift.startDateTime ? shift.startDateTime.split('T')[0] : shift.date;
     if (!shiftsByDate.has(date)) {
       shiftsByDate.set(date, []);
     }
@@ -87,14 +88,27 @@ function formatShiftDetails(
   positionNames: Map<number, string>,
   shiftTypeNames: Map<number, string>
 ): string {
-  const startTime = new Date(shift.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const endTime = new Date(shift.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  // Use correct field names from Planday API (camelCase instead of snake_case)
+  const startTime = shift.startDateTime ? 
+    new Date(shift.startDateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 
+    'No start time';
+  const endTime = shift.endDateTime ? 
+    new Date(shift.endDateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 
+    'No end time';
   const duration = shift.duration ? `${(shift.duration / 60).toFixed(1)}h` : 'N/A';
   
-  const employeeName = employeeNames.get(shift.employee_id) || `Employee ${shift.employee_id}`;
-  const departmentName = departmentNames.get(shift.department_id) || `Dept ${shift.department_id}`;
-  const positionName = positionNames.get(shift.position_id) || `Position ${shift.position_id}`;
-  const shiftTypeName = shiftTypeNames.get(shift.shift_type_id) || `Type ${shift.shift_type_id}`;
+  const employeeName = shift.employeeId ? 
+    employeeNames.get(shift.employeeId) || `Employee ${shift.employeeId}` : 
+    'Unassigned';
+  const departmentName = shift.departmentId ? 
+    departmentNames.get(shift.departmentId) || `Dept ${shift.departmentId}` : 
+    'No department';
+  const positionName = shift.positionId ? 
+    positionNames.get(shift.positionId) || `Position ${shift.positionId}` : 
+    'No position';
+  const shiftTypeName = shift.shiftTypeId ? 
+    shiftTypeNames.get(shift.shiftTypeId) || `Type ${shift.shiftTypeId}` : 
+    'No shift type';
 
   let result = `**🔸 ${employeeName}** (${startTime} - ${endTime}, ${duration})\n`;
   result += `   📍 ${departmentName} | 👤 ${positionName} | 📋 ${shiftTypeName}\n`;
@@ -103,8 +117,9 @@ function formatShiftDetails(
     result += `   ⚠️ Status: ${shift.status}\n`;
   }
   
-  if (shift.notes) {
-    result += `   📝 Notes: ${shift.notes}\n`;
+  // Use correct field name: comment instead of notes
+  if (shift.comment) {
+    result += `   📝 Notes: ${shift.comment}\n`;
   }
 
   return result;
@@ -405,10 +420,11 @@ export function formatShiftOperationResult(
   if (success && data) {
     result += '**Result:**\n';
     if (data.id) result += `• Shift ID: ${data.id}\n`;
-    if (data.start_time) result += `• Start Time: ${new Date(data.start_time).toLocaleString()}\n`;
-    if (data.end_time) result += `• End Time: ${new Date(data.end_time).toLocaleString()}\n`;
-    if (data.employee_id) result += `• Employee ID: ${data.employee_id}\n`;
-    if (data.position_id) result += `• Position ID: ${data.position_id}\n`;
+    // Use correct field names from Planday API
+    if (data.startDateTime) result += `• Start Time: ${new Date(data.startDateTime).toLocaleString()}\n`;
+    if (data.endDateTime) result += `• End Time: ${new Date(data.endDateTime).toLocaleString()}\n`;
+    if (data.employeeId) result += `• Employee ID: ${data.employeeId}\n`;
+    if (data.positionId) result += `• Position ID: ${data.positionId}\n`;
   }
   
   if (!success && error) {

@@ -13,6 +13,35 @@
 // ================================
 
 /**
+ * Calculate shift duration in hours from startDateTime and endDateTime
+ * Handles edge cases like missing times or invalid dates
+ */
+function calculateShiftDuration(shift: any): number {
+  if (!shift.startDateTime || !shift.endDateTime) {
+    return 0;
+  }
+  
+  try {
+    const startTime = new Date(shift.startDateTime);
+    const endTime = new Date(shift.endDateTime);
+    
+    // Check for valid dates
+    if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+      return 0;
+    }
+    
+    // Calculate duration in milliseconds, then convert to hours
+    const durationMs = endTime.getTime() - startTime.getTime();
+    const durationHours = durationMs / (1000 * 60 * 60);
+    
+    // Handle edge case: negative duration (end before start)
+    return Math.max(0, durationHours);
+  } catch (error) {
+    return 0;
+  }
+}
+
+/**
  * Format shifts data with comprehensive details and cross-references
  * Provides a complete view of shift scheduling with contextual information
  */
@@ -42,7 +71,11 @@ export function formatShifts(
 
   // Calculate summary statistics
   const statusSummary = getShiftStatusSummary(shifts);
-  const totalHours = shifts.reduce((sum, shift) => sum + (shift.duration || 0), 0) / 60; // Convert minutes to hours
+  // Calculate total hours from actual start/end times instead of non-existent duration field
+  const totalHours = shifts.reduce((sum, shift) => {
+    const duration = calculateShiftDuration(shift);
+    return sum + (duration || 0);
+  }, 0);
 
   let result = `📅 **Shifts Overview (${startDate} to ${endDate})**\n\n`;
   result += `**Summary:**\n`;
@@ -95,7 +128,9 @@ function formatShiftDetails(
   const endTime = shift.endDateTime ? 
     new Date(shift.endDateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 
     'No end time';
-  const duration = shift.duration ? `${(shift.duration / 60).toFixed(1)}h` : 'N/A';
+  // Calculate actual duration from start/end times
+  const calculatedDuration = calculateShiftDuration(shift);
+  const duration = calculatedDuration > 0 ? `${calculatedDuration.toFixed(1)}h` : 'N/A';
   
   const employeeName = shift.employeeId ? 
     employeeNames.get(shift.employeeId) || `Employee ${shift.employeeId}` : 

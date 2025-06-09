@@ -34,6 +34,9 @@ import {
   validateEmployeeForShift
 } from '../services/api/scheduling-api.ts';
 
+// Import HR API functions for name resolution
+import { getEmployees, getDepartments } from '../services/api/hr-api.ts';
+
 // Import comprehensive scheduling formatters
 import {
   formatShifts,
@@ -91,7 +94,67 @@ export function registerSchedulingTools(server: McpServer) {
         };
 
         const response = await getShifts(startDate, endDate, filters);
-        const formatted = formatShifts(response.data, startDate, endDate);
+        
+        // Extract unique IDs from shifts to fetch lookup data efficiently
+        const shifts = response.data || [];
+        const uniqueEmployeeIds = [...new Set(shifts.filter(s => s.employeeId).map(s => s.employeeId!))];
+        const uniqueDepartmentIds = [...new Set(shifts.filter(s => s.departmentId).map(s => s.departmentId!))];
+        const uniquePositionIds = [...new Set(shifts.filter(s => s.positionId).map(s => s.positionId!))];
+        const uniqueShiftTypeIds = [...new Set(shifts.filter(s => s.shiftTypeId).map(s => s.shiftTypeId!))];
+
+        // Fetch lookup data in parallel for efficiency
+        const [employeeData, departmentData, positionData, shiftTypeData] = await Promise.all([
+          uniqueEmployeeIds.length > 0 ? getEmployees({ limit: 1000 }).catch(() => ({ data: [] })) : { data: [] },
+          uniqueDepartmentIds.length > 0 ? getDepartments({ limit: 1000 }).catch(() => ({ data: [] })) : { data: [] },
+          uniquePositionIds.length > 0 ? getPositions({ limit: 1000 }).catch(() => ({ data: [] })) : { data: [] },
+          uniqueShiftTypeIds.length > 0 ? getShiftTypes({ limit: 1000 }).catch(() => ({ data: [] })) : { data: [] }
+        ]);
+
+        // Create lookup maps for efficient name resolution
+        const employeeNames = new Map<number, string>();
+        const departmentNames = new Map<number, string>();
+        const positionNames = new Map<number, string>();
+        const shiftTypeNames = new Map<number, string>();
+
+        // Populate employee names map
+        if (employeeData.data) {
+          employeeData.data.forEach((emp: any) => {
+            if (emp.id && (emp.firstName || emp.lastName)) {
+              const fullName = [emp.firstName, emp.lastName].filter(Boolean).join(' ');
+              employeeNames.set(emp.id, fullName || `Employee ${emp.id}`);
+            }
+          });
+        }
+
+        // Populate department names map
+        if (departmentData.data) {
+          departmentData.data.forEach((dept: any) => {
+            if (dept.id && dept.name) {
+              departmentNames.set(dept.id, dept.name);
+            }
+          });
+        }
+
+        // Populate position names map
+        if (positionData.data) {
+          positionData.data.forEach((pos: any) => {
+            if (pos.id && pos.name) {
+              positionNames.set(pos.id, pos.name);
+            }
+          });
+        }
+
+        // Populate shift type names map
+        if (shiftTypeData.data) {
+          shiftTypeData.data.forEach((type: any) => {
+            if (type.id && type.name) {
+              shiftTypeNames.set(type.id, type.name);
+            }
+          });
+        }
+
+        // Format shifts with lookup data
+        const formatted = formatShifts(shifts, startDate, endDate, employeeNames, departmentNames, positionNames, shiftTypeNames);
         
         return {
           content: [{

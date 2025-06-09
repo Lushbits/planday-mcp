@@ -82,7 +82,7 @@ export class AuthService {
   }
 
   getSessionInfo(): PlandayTokens | null {
-    return this.getSession();
+    return this.getSession() || null;
   }
 
   // Token exchange method (moved from PlandayAPIService)

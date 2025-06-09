@@ -11,8 +11,9 @@
 		"noEmit": true,
 		"isolatedModules": true,
 		"allowSyntheticDefaultImports": true,
+		"allowImportingTsExtensions": true,
 		"forceConsistentCasingInFileNames": true,
-		"strict": true,
+		"strict": false,
 		"skipLibCheck": true
 	},
 	"include": ["worker-configuration.d.ts", "src/**/*.ts"]

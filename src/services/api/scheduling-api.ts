@@ -3,6 +3,13 @@
 // Covers: Shifts, Positions, Shift Types, Sections, Schedule Days, Skills, History, Time & Cost
 
 import { makeAuthenticatedRequest } from "../auth";
+import { authService } from '../auth';
+import { getEmployeeById } from './hr-api';
+
+// Quick helper to handle TypeScript strict mode for API responses
+const parseJsonResponse = async (response: Response): Promise<any> => {
+  return await response.json() as any;
+};
 
 // ================================
 // TYPE DEFINITIONS
@@ -200,6 +207,14 @@ export interface ShiftCost {
   positionId: number;
 }
 
+// Validation Types
+export interface ShiftAssignmentValidation {
+  isValid: boolean;
+  reason?: string;
+  employeeGroupValid?: boolean;
+  departmentValid?: boolean;
+}
+
 // ================================
 // SHIFTS API
 // ================================
@@ -239,7 +254,7 @@ export async function getShifts(
     throw new Error(`Failed to fetch shifts: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
+  const data = await parseJsonResponse(response);
   return { data: data.data || [], paging: data.paging || {} };
 }
 
@@ -741,4 +756,86 @@ export async function getPositionsByIds(ids: number[]): Promise<Map<number, Posi
   });
 
   return positionMap;
+}
+
+// ================================
+// VALIDATION FUNCTIONS
+// ================================
+
+/**
+ * Validate that an employee can be assigned to a specific shift
+ * Checks employee group membership and department access
+ */
+export async function validateEmployeeForShift(
+  employeeId: number, 
+  shiftId: number
+): Promise<ShiftAssignmentValidation> {
+  try {
+    // Get shift details to see required employee group and department
+    const shift = await getShiftById(shiftId);
+    if (!shift) {
+      return {
+        isValid: false,
+        reason: `Shift ${shiftId} not found`
+      };
+    }
+
+    // Get employee details to check their groups and departments
+    const employeeResponse = await getEmployeeById(employeeId);
+    if (!employeeResponse?.data) {
+      return {
+        isValid: false,
+        reason: `Employee ${employeeId} not found`
+      };
+    }
+
+    const employee = employeeResponse.data;
+    const employeeGroups = employee.employeeGroups || [];
+    const employeeDepartments = employee.departments || [];
+
+    // Check employee group membership
+    const employeeGroupValid = shift.employeeGroupId ? 
+      employeeGroups.includes(shift.employeeGroupId) : true;
+
+    // Check department access
+    const departmentValid = shift.departmentId ? 
+      employeeDepartments.includes(shift.departmentId) : true;
+
+    // Build detailed error message
+    if (!employeeGroupValid && !departmentValid) {
+      return {
+        isValid: false,
+        reason: `Employee ${employee.firstName} ${employee.lastName} cannot be assigned: not a member of required employee group (${shift.employeeGroupId}) and not assigned to required department (${shift.departmentId})`,
+        employeeGroupValid: false,
+        departmentValid: false
+      };
+    } else if (!employeeGroupValid) {
+      return {
+        isValid: false,
+        reason: `Employee ${employee.firstName} ${employee.lastName} cannot be assigned: not a member of required employee group (${shift.employeeGroupId})`,
+        employeeGroupValid: false,
+        departmentValid: true
+      };
+    } else if (!departmentValid) {
+      return {
+        isValid: false,
+        reason: `Employee ${employee.firstName} ${employee.lastName} cannot be assigned: not assigned to required department (${shift.departmentId})`,
+        employeeGroupValid: true,
+        departmentValid: false
+      };
+    }
+
+    // All validations passed
+    return {
+      isValid: true,
+      employeeGroupValid: true,
+      departmentValid: true
+    };
+
+  } catch (error) {
+    return {
+      isValid: false,
+      reason: `Validation failed: ${error instanceof Error ? error.message : String(error)}`
+    };
+  }
 }

@@ -480,97 +480,253 @@ function formatShiftHistoryRecord(record: any, isLatest: boolean = false): strin
 
 /**
  * Format time and cost data with comprehensive breakdown
+ * Based on the actual Planday API response structure
  */
 export function formatTimeAndCost(
   data: any,
   startDate: string,
   endDate: string
 ): string {
-  if (!data) {
-    return `💰 **Time and Cost Analysis (${startDate} to ${endDate})**\n\nNo data available for the specified period.`;
+  if (!data || !data.costs || data.costs.length === 0) {
+    return `💰 **Time and Cost Analysis (${startDate} to ${endDate})**\n\nNo cost data available for the specified period.`;
   }
+
+  const costs = data.costs;
+  // Use the currency symbol from the API response as intended
+  const currencySymbol = data.currencySymbol || '$';
+  
+  // Calculate summary statistics
+  const totalCost = costs.reduce((sum: number, cost: any) => sum + cost.cost, 0);
+  const totalShifts = costs.length;
+  
+  // Enhanced duration parsing with better error handling and debugging
+  const totalHours = costs.reduce((sum: number, cost: any) => {
+    try {
+      // Handle different possible duration formats
+      const duration = cost.duration || '0:00:00';
+      
+      // Check if duration is in colon-separated format
+      if (typeof duration === 'string' && duration.includes(':')) {
+        const parts = duration.split(':');
+        
+        if (parts.length === 3) {
+          // Based on the API response, this seems to be D:HH:MM format (days:hours:minutes)
+          // not HH:MM:SS as documented
+          const [days, hours, minutes] = parts.map(Number);
+          const totalHours = days * 24 + hours + minutes/60;
+          return sum + totalHours;
+        } else if (parts.length === 2) {
+          // HH:MM format
+          const [hours, minutes] = parts.map(Number);
+          const totalHours = hours + minutes/60;
+          return sum + totalHours;
+        }
+      }
+      
+      // If duration is a number, assume it's in hours
+      if (typeof duration === 'number') {
+        return sum + duration;
+      }
+      
+      // Fallback: try to parse as a decimal number
+      const numericDuration = parseFloat(duration);
+      if (!isNaN(numericDuration)) {
+        return sum + numericDuration;
+      }
+      
+      console.warn(`Unable to parse duration: ${duration} for shift ${cost.shiftId}`);
+      return sum;
+      
+    } catch (error) {
+      console.warn(`Error parsing duration for shift ${cost.shiftId}:`, error);
+      return sum;
+    }
+  }, 0);
+  
+  const avgCostPerShift = totalCost / totalShifts;
+  const avgHourlyRate = totalHours > 0 ? totalCost / totalHours : 0;
 
   let result = `💰 **Time and Cost Analysis (${startDate} to ${endDate})**\n\n`;
 
-  // Summary section
-  if (data.summary) {
-    result += '### 📊 Summary\n';
-    if (data.summary.total_hours) {
-      result += `⏰ **Total Hours:** ${data.summary.total_hours.toFixed(1)}h\n`;
-    }
-    if (data.summary.total_cost) {
-      result += `💵 **Total Cost:** $${data.summary.total_cost.toFixed(2)}\n`;
-    }
-    if (data.summary.average_hourly_rate) {
-      result += `📈 **Average Rate:** $${data.summary.average_hourly_rate.toFixed(2)}/hour\n`;
-    }
-    if (data.summary.shift_count) {
-      result += `📅 **Total Shifts:** ${data.summary.shift_count}\n`;
-    }
-    result += '\n';
-  }
+  // Add debugging info to help diagnose the time calculation issue
+  result += '### 🔍 Debug Info (Remove after fixing)\n';
+  result += `Raw API Currency Symbol: ${data.currencySymbol || 'undefined'}\n`;
+  result += `Sample Duration Values: ${costs.slice(0, 3).map((c: any) => `${c.shiftId}:${c.duration}`).join(', ')}\n`;
+  result += `Parsed Total Hours: ${totalHours}\n\n`;
 
-  // Breakdown by employee
-  if (data.employees && data.employees.length > 0) {
-    result += '### 👥 Breakdown by Employee\n\n';
-    data.employees.forEach((emp: any) => {
-      result += formatEmployeeTimeAndCost(emp);
-      result += '\n';
+  // Summary section
+  result += '### 📊 Summary\n';
+  result += `⏰ **Total Hours:** ${totalHours.toFixed(1)}h\n`;
+  result += `💵 **Total Cost:** ${currencySymbol}${totalCost.toFixed(2)}\n`;
+  result += `📈 **Average Rate:** ${currencySymbol}${avgHourlyRate.toFixed(2)}/hour\n`;
+  result += `📅 **Total Shifts:** ${totalShifts}\n`;
+  result += `💰 **Average Cost/Shift:** ${currencySymbol}${avgCostPerShift.toFixed(2)}\n\n`;
+
+  // Group by date for daily breakdown
+  const costsByDate = new Map<string, any[]>();
+  costs.forEach((cost: any) => {
+    if (!costsByDate.has(cost.date)) {
+      costsByDate.set(cost.date, []);
+    }
+    costsByDate.get(cost.date)!.push(cost);
+  });
+
+  result += '### 📅 Daily Breakdown\n\n';
+  const sortedDates = Array.from(costsByDate.keys()).sort();
+  
+  sortedDates.forEach(date => {
+    const dayCosts = costsByDate.get(date)!;
+    const dayTotal = dayCosts.reduce((sum: number, cost: any) => sum + cost.cost, 0);
+    const dayHours = dayCosts.reduce((sum: number, cost: any) => {
+      const duration = cost.duration || '0:00:00';
+      try {
+        if (typeof duration === 'string' && duration.includes(':')) {
+          const parts = duration.split(':');
+          if (parts.length === 3) {
+            // D:HH:MM format (days:hours:minutes)
+            const [days, hours, minutes] = parts.map(Number);
+            return sum + days * 24 + hours + minutes/60;
+          } else if (parts.length === 2) {
+            const [hours, minutes] = parts.map(Number);
+            return sum + hours + minutes/60;
+          }
+        }
+        return sum + (parseFloat(duration) || 0);
+      } catch {
+        return sum;
+      }
+    }, 0);
+    
+    result += `**📆 ${date}**\n`;
+    result += `• Shifts: ${dayCosts.length} | Hours: ${dayHours.toFixed(1)}h | Cost: ${currencySymbol}${dayTotal.toFixed(2)}\n\n`;
+  });
+
+  // Group by employee for detailed breakdown
+  const costsByEmployee = new Map<number, any[]>();
+  costs.forEach((cost: any) => {
+    if (!costsByEmployee.has(cost.employeeId)) {
+      costsByEmployee.set(cost.employeeId, []);
+    }
+    costsByEmployee.get(cost.employeeId)!.push(cost);
+  });
+
+  if (costsByEmployee.size > 0) {
+    result += '### 👥 Employee Breakdown\n\n';
+    
+    Array.from(costsByEmployee.entries()).forEach(([employeeId, empCosts]) => {
+      const empTotal = empCosts.reduce((sum: number, cost: any) => sum + cost.cost, 0);
+      const empHours = empCosts.reduce((sum: number, cost: any) => {
+        const duration = cost.duration || '0:00:00';
+        try {
+          if (typeof duration === 'string' && duration.includes(':')) {
+            const parts = duration.split(':');
+            if (parts.length === 3) {
+              // D:HH:MM format (days:hours:minutes)
+              const [days, hours, minutes] = parts.map(Number);
+              return sum + days * 24 + hours + minutes/60;
+            } else if (parts.length === 2) {
+              const [hours, minutes] = parts.map(Number);
+              return sum + hours + minutes/60;
+            }
+          }
+          return sum + (parseFloat(duration) || 0);
+        } catch {
+          return sum;
+        }
+      }, 0);
+      const empRate = empHours > 0 ? empTotal / empHours : 0;
+      
+      result += `**👤 Employee ${employeeId}**\n`;
+      result += `• Hours: ${empHours.toFixed(1)}h | Cost: ${currencySymbol}${empTotal.toFixed(2)} | Rate: ${currencySymbol}${empRate.toFixed(2)}/hr\n`;
+      result += `• Shifts: ${empCosts.length}\n\n`;
     });
   }
 
-  // Breakdown by department
-  if (data.departments && data.departments.length > 0) {
-    result += '### 🏢 Breakdown by Department\n\n';
-    data.departments.forEach((dept: any) => {
-      result += formatDepartmentTimeAndCost(dept);
-      result += '\n';
+  // Group by position for position analysis
+  const costsByPosition = new Map<number, any[]>();
+  costs.forEach((cost: any) => {
+    if (!costsByPosition.has(cost.positionId)) {
+      costsByPosition.set(cost.positionId, []);
+    }
+    costsByPosition.get(cost.positionId)!.push(cost);
+  });
+
+  if (costsByPosition.size > 0) {
+    result += '### 📋 Position Analysis\n\n';
+    
+    Array.from(costsByPosition.entries()).forEach(([positionId, posCosts]) => {
+      const posTotal = posCosts.reduce((sum: number, cost: any) => sum + cost.cost, 0);
+      const posHours = posCosts.reduce((sum: number, cost: any) => {
+        const duration = cost.duration || '0:00:00';
+        try {
+          if (typeof duration === 'string' && duration.includes(':')) {
+            const parts = duration.split(':');
+            if (parts.length === 3) {
+              // D:HH:MM format (days:hours:minutes)
+              const [days, hours, minutes] = parts.map(Number);
+              return sum + days * 24 + hours + minutes/60;
+            } else if (parts.length === 2) {
+              const [hours, minutes] = parts.map(Number);
+              return sum + hours + minutes/60;
+            }
+          }
+          return sum + (parseFloat(duration) || 0);
+        } catch {
+          return sum;
+        }
+      }, 0);
+      const posRate = posHours > 0 ? posTotal / posHours : 0;
+      
+      result += `**📍 Position ${positionId}**\n`;
+      result += `• Hours: ${posHours.toFixed(1)}h | Cost: ${currencySymbol}${posTotal.toFixed(2)} | Rate: ${currencySymbol}${posRate.toFixed(2)}/hr\n`;
+      result += `• Shifts: ${posCosts.length}\n\n`;
+    });
+  }
+
+  // Group by shift type for shift type analysis
+  const costsByShiftType = new Map<number, any[]>();
+  costs.forEach((cost: any) => {
+    if (!costsByShiftType.has(cost.shiftTypeId)) {
+      costsByShiftType.set(cost.shiftTypeId, []);
+    }
+    costsByShiftType.get(cost.shiftTypeId)!.push(cost);
+  });
+
+  if (costsByShiftType.size > 0) {
+    result += '### 🏷️ Shift Type Analysis\n\n';
+    
+    Array.from(costsByShiftType.entries()).forEach(([shiftTypeId, typeCosts]) => {
+      const typeTotal = typeCosts.reduce((sum: number, cost: any) => sum + cost.cost, 0);
+      const typeHours = typeCosts.reduce((sum: number, cost: any) => {
+        const duration = cost.duration || '0:00:00';
+        try {
+          if (typeof duration === 'string' && duration.includes(':')) {
+            const parts = duration.split(':');
+            if (parts.length === 3) {
+              // D:HH:MM format (days:hours:minutes)
+              const [days, hours, minutes] = parts.map(Number);
+              return sum + days * 24 + hours + minutes/60;
+            } else if (parts.length === 2) {
+              const [hours, minutes] = parts.map(Number);
+              return sum + hours + minutes/60;
+            }
+          }
+          return sum + (parseFloat(duration) || 0);
+        } catch {
+          return sum;
+        }
+      }, 0);
+      const typeRate = typeHours > 0 ? typeTotal / typeHours : 0;
+      
+      result += `**🏷️ Shift Type ${shiftTypeId}**\n`;
+      result += `• Hours: ${typeHours.toFixed(1)}h | Cost: ${currencySymbol}${typeTotal.toFixed(2)} | Rate: ${currencySymbol}${typeRate.toFixed(2)}/hr\n`;
+      result += `• Shifts: ${typeCosts.length}\n\n`;
     });
   }
 
   return result.trim();
 }
 
-/**
- * Format employee time and cost details
- */
-function formatEmployeeTimeAndCost(employee: any): string {
-  let result = `**👤 ${employee.name || `Employee ${employee.id}`}**\n`;
-  
-  if (employee.hours) {
-    result += `⏰ Hours: ${employee.hours.toFixed(1)}h\n`;
-  }
-  if (employee.cost) {
-    result += `💵 Cost: $${employee.cost.toFixed(2)}\n`;
-  }
-  if (employee.shifts) {
-    result += `📅 Shifts: ${employee.shifts}\n`;
-  }
-  if (employee.hourly_rate) {
-    result += `📈 Rate: $${employee.hourly_rate.toFixed(2)}/hour\n`;
-  }
-
-  return result;
-}
-
-/**
- * Format department time and cost details
- */
-function formatDepartmentTimeAndCost(department: any): string {
-  let result = `**🏢 ${department.name || `Department ${department.id}`}**\n`;
-  
-  if (department.hours) {
-    result += `⏰ Total Hours: ${department.hours.toFixed(1)}h\n`;
-  }
-  if (department.cost) {
-    result += `💵 Total Cost: $${department.cost.toFixed(2)}\n`;
-  }
-  if (department.employee_count) {
-    result += `👥 Employees: ${department.employee_count}\n`;
-  }
-  if (department.shift_count) {
-    result += `📅 Shifts: ${department.shift_count}\n`;
-  }
-
-  return result;
-} 
+// Note: The old formatEmployeeTimeAndCost and formatDepartmentTimeAndCost helper functions 
+// have been removed and replaced with inline logic above to match the actual API response structure
+// from the Planday Time and Cost API documentation 

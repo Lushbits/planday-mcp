@@ -9,6 +9,7 @@ export function registerAuthTools(server: McpServer) {
   // Main authentication tool
   server.tool(
     "authenticate-planday",
+    "Authenticate with Planday API using refresh token to establish secure session for all HR and scheduling operations. Essential first step for accessing employee data, shifts, and payroll. Perfect for questions like: 'Connect to Planday', 'I need to login', 'Set up authentication to access employee data'",
     { 
       refreshToken: z.string().describe("Your Planday refresh token from API Access settings")
     },
@@ -35,6 +36,7 @@ export function registerAuthTools(server: McpServer) {
   // Session debug tool
   server.tool(
     "debug-session",
+    "Debug authentication session status and troubleshoot login issues by checking token validity and session state. Shows detailed session information for problem diagnosis. Perfect for questions like: 'Why am I getting auth errors?', 'Check my login status', 'Troubleshoot connection problems'",
     {},
     async () => {
       try {
@@ -64,6 +66,7 @@ export function registerAuthTools(server: McpServer) {
   // Environment debug tool
   server.tool(
     "debug-env",
+    "Check environment configuration and system status for debugging connectivity and setup issues. Verifies service availability and session data integrity. Perfect for questions like: 'Is the system configured correctly?', 'Check environment setup', 'Diagnose connection environment'",
     {},
     async () => {
       try {
@@ -90,6 +93,7 @@ export function registerAuthTools(server: McpServer) {
   // API debug tool
   server.tool(
     "debug-api-response",
+    "Test API endpoints and debug API response issues by making controlled requests to shifts, employees, or departments. Helps diagnose data access problems and API connectivity. Perfect for questions like: 'Test if API is working', 'Check employee data access', 'Debug API connection issues'",
     {
       endpoint: z.enum(["shifts", "employees", "departments"]).describe("Which API endpoint to debug"),
       startDate: z.string().optional().describe("For shifts: start date (YYYY-MM-DD)"),

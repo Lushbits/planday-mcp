@@ -9,6 +9,7 @@ export function registerAbsenceTools(server: McpServer) {
   // Get absence records tool
   server.tool(
     "get-absence-records",
+    "Get comprehensive time-off records with filtering by employee, date range, and approval status. Shows vacation days, sick leave, and other absence types with approval workflow status. Perfect for questions like: 'Who is out this week?', 'Show all vacation requests', 'Find sick leave records for May'",
     {
       employeeId: z.number().optional().describe("Filter by specific employee ID"),
       startDate: z.string().optional().describe("Filter by start date (YYYY-MM-DD)"),
@@ -85,6 +86,7 @@ export function registerAbsenceTools(server: McpServer) {
   // Get specific absence record by ID
   server.tool(
     "get-absence-record",
+    "Get detailed information for one specific absence request including dates, reason, approval status, and employee details. Shows complete absence record with all workflow information. Perfect for questions like: 'Tell me about absence request #123', 'Show details of Sarah's vacation request', 'Get specific time-off record info'",
     {
       recordId: z.number().describe("The ID of the absence record to retrieve")
     },
@@ -138,6 +140,7 @@ export function registerAbsenceTools(server: McpServer) {
   // Get approved absence requests
   server.tool(
     "get-approved-absence-requests",
+    "Get all approved time-off requests for staffing and coverage planning. Shows confirmed absences that need scheduling consideration with employee names and dates. Perfect for questions like: 'Who is approved to be out next week?', 'Show confirmed vacation days', 'What approved time-off affects our schedule?'",
     {
       startDate: z.string().optional().describe("Filter by start date (YYYY-MM-DD)"),
       endDate: z.string().optional().describe("Filter by end date (YYYY-MM-DD)")
@@ -198,6 +201,7 @@ export function registerAbsenceTools(server: McpServer) {
   // Get declined absence requests
   server.tool(
     "get-declined-absence-requests",
+    "Get all declined time-off requests for review and employee communication. Shows rejected absence requests with dates and employees for follow-up discussions. Perfect for questions like: 'Which vacation requests were denied?', 'Show declined time-off for this month', 'Who had rejected absence requests?'",
     {
       startDate: z.string().optional().describe("Filter by start date (YYYY-MM-DD)"),
       endDate: z.string().optional().describe("Filter by end date (YYYY-MM-DD)")

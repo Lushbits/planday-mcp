@@ -27,6 +27,7 @@ export function registerPayrollTools(server: McpServer) {
   // Get detailed payroll data with cost breakdown
   server.tool(
     "get-payroll-data",
+    "Get comprehensive payroll reports with detailed cost breakdowns, shift-by-shift analysis, and employee wage calculations for specific date ranges. Shows approved shifts for final payroll or all shifts for budget planning. Perfect for questions like: 'What are the payroll costs this week?', 'Show detailed wage breakdown', 'Calculate labor costs for June'",
     {
       startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01')"),
       endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07')"),
@@ -118,6 +119,7 @@ export function registerPayrollTools(server: McpServer) {
   // Get payroll summary for quick cost overview
   server.tool(
     "get-payroll-summary",
+    "Get quick payroll summary with total costs and high-level wage overview for budget monitoring and cost control. Provides executive-level financial insight without detailed breakdowns. Perfect for questions like: 'What are total labor costs?', 'Quick payroll summary', 'How much will we spend on wages this month?'",
     {
       startDate: z.string().describe("Start date in YYYY-MM-DD format (e.g., '2024-06-01')"),
       endDate: z.string().describe("End date in YYYY-MM-DD format (e.g., '2024-06-07')"),

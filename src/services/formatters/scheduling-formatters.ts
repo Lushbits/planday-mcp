@@ -468,61 +468,120 @@ export function formatShiftOperationResult(
   
   return result;
 }
-
 // ================================
-// SHIFT HISTORY FORMATTING
+// SHIFT HISTORY FORMATTING (FIXED FOR PLANDAY API)
 // ================================
 
 /**
- * Format shift history data with chronological view of changes
+ * Format shift history data from Planday API
+ * Planday returns: { modifiedAt, modifiedBy: { id, name }, changes: string[] }
  */
 export function formatShiftHistory(
   historyData: any[],
   shiftId: string | number
 ): string {
-  if (!historyData.length) {
+  if (!historyData || historyData.length === 0) {
     return `📜 **Shift History (ID: ${shiftId})**\n\nNo history records found for this shift.`;
   }
 
   let result = `📜 **Shift History (ID: ${shiftId})**\n\n`;
   result += `**Total Records:** ${historyData.length}\n\n`;
 
-  // Sort by timestamp (most recent first)
-  const sortedHistory = historyData.sort((a, b) => 
-    new Date(b.timestamp || b.created_at || 0).getTime() - 
-    new Date(a.timestamp || a.created_at || 0).getTime()
-  );
+  // Sort by modifiedAt timestamp (most recent first)
+  const sortedHistory = historyData.sort((a, b) => {
+    const timeA = new Date(a.modifiedAt || 0).getTime();
+    const timeB = new Date(b.modifiedAt || 0).getTime();
+    return timeB - timeA;
+  });
 
   sortedHistory.forEach((record, index) => {
     result += formatShiftHistoryRecord(record, index === 0);
-    result += '\n';
+    if (index < sortedHistory.length - 1) {
+      result += '\n---\n\n';
+    }
   });
 
   return result.trim();
 }
 
 /**
- * Format individual shift history record
+ * Format individual shift history record for Planday API format
  */
 function formatShiftHistoryRecord(record: any, isLatest: boolean = false): string {
-  const timestamp = record.timestamp || record.created_at;
-  const date = timestamp ? new Date(timestamp).toLocaleString() : 'Unknown time';
-  const action = record.action || record.change_type || 'Change';
-  const user = record.user_name || record.user_id || 'System';
+  // Extract data from Planday API format
+  const modifiedAt = record.modifiedAt;
+  const modifiedBy = record.modifiedBy || {};
+  const changes = record.changes || [];
+  
+  // Format the timestamp
+  const date = modifiedAt 
+    ? new Date(modifiedAt).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      })
+    : 'Unknown time';
 
-  let result = `### ${isLatest ? '🔥 Latest' : '📋'} ${action}\n`;
+  // Get user info
+  const userName = modifiedBy.name || `User ${modifiedBy.id}` || 'System';
+  const userId = modifiedBy.id;
+
+  // Build the formatted output
+  let result = `### ${isLatest ? '🔥 Latest Change' : '📋 Change'}\n`;
   result += `📅 **When:** ${date}\n`;
-  result += `👤 **Who:** ${user}\n`;
-
-  if (record.old_value !== undefined && record.new_value !== undefined) {
-    result += `🔄 **Change:** ${record.field_name || 'Value'} changed from "${record.old_value}" to "${record.new_value}"\n`;
+  result += `👤 **Who:** ${userName}${userId ? ` (ID: ${userId})` : ''}\n`;
+  
+  // Format the changes
+  if (changes.length > 0) {
+    result += `🔄 **Changes Made:**\n`;
+    changes.forEach((change: string, index: number) => {
+      result += `   ${index + 1}. ${change}\n`;
+    });
+  } else {
+    result += `📝 **Change:** No specific details available\n`;
   }
 
-  if (record.description || record.notes) {
-    result += `📝 **Details:** ${record.description || record.notes}\n`;
+  return result;
+}
+
+/**
+ * Format shift history for timeline view (alternative formatting)
+ */
+export function formatShiftHistoryTimeline(
+  historyData: any[],
+  shiftId: string | number
+): string {
+  if (!historyData || historyData.length === 0) {
+    return `📜 **Shift ${shiftId} Timeline**\n\nNo history available.`;
   }
 
-  return result + '\n';
+  let result = `📜 **Shift ${shiftId} Timeline** (${historyData.length} events)\n\n`;
+
+  // Sort chronologically (oldest first for timeline)
+  const sortedHistory = historyData.sort((a, b) => {
+    const timeA = new Date(a.modifiedAt || 0).getTime();
+    const timeB = new Date(b.modifiedAt || 0).getTime();
+    return timeA - timeB;
+  });
+
+  sortedHistory.forEach((record, index) => {
+    const date = record.modifiedAt 
+      ? new Date(record.modifiedAt).toLocaleString()
+      : 'Unknown time';
+    const user = record.modifiedBy?.name || 'System';
+    const changes = record.changes || [];
+
+    result += `**${index + 1}.** ${date} - ${user}\n`;
+    changes.forEach((change: string) => {
+      result += `    • ${change}\n`;
+    });
+    result += '\n';
+  });
+
+  return result.trim();
 }
 
 // ================================

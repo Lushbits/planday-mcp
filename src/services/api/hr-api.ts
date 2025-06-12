@@ -1458,7 +1458,7 @@ export function sanitizeEmployeeData(employee: Partial<CreateEmployeeRequest | U
 // EXPORT ALL FUNCTIONS
 // =============================================================================
 
-export {
+/* export {
   // Core employee management
   getEmployees,
   getDeactivatedEmployees,
@@ -1528,3 +1528,4 @@ export {
   validateSkillData,
   sanitizeEmployeeData
 };
+*/

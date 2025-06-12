@@ -211,6 +211,30 @@ export interface EmployeeHistoryEntry {
   modifiedByUserGuid: string;
 }
 
+// Custom Field Attachment Types
+export interface CustomFieldAttachment {
+  employeeId: number;
+  customPropertyName: string;
+  attachmentData: string; // Base64 encoded data URI
+}
+
+// Bulk Operations Types
+export interface BulkEmployeeResult {
+  successful: Array<{
+    index: number;
+    employee: string;
+    id: number;
+    userName: string;
+  }>;
+  failed: Array<{
+    index: number;
+    employee: string;
+    userName: string;
+    error: string;
+  }>;
+  total: number;
+}
+
 // API Response Types
 export interface PaginatedResponse<T> {
   paging: {
@@ -350,6 +374,69 @@ export async function createEmployee(employee: CreateEmployeeRequest): Promise<A
 }
 
 /**
+ * Create multiple employees in bulk with comprehensive error handling
+ */
+export async function createEmployeesBulk(
+  employees: CreateEmployeeRequest[], 
+  options: {
+    continueOnError?: boolean;
+    validateDepartments?: boolean;
+    batchSize?: number;
+  } = {}
+): Promise<BulkEmployeeResult> {
+  const { continueOnError = true, batchSize = 10 } = options;
+  
+  const results: BulkEmployeeResult = {
+    successful: [],
+    failed: [],
+    total: employees.length
+  };
+
+  // Process employees in batches to avoid overwhelming the API
+  for (let i = 0; i < employees.length; i += batchSize) {
+    const batch = employees.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async (employee, batchIndex) => {
+      const globalIndex = i + batchIndex;
+      
+      try {
+        const response = await createEmployee(employee);
+        
+        results.successful.push({
+          index: globalIndex + 1,
+          employee: `${employee.firstName} ${employee.lastName}`,
+          id: response.data.id,
+          userName: employee.userName
+        });
+        
+      } catch (error) {
+        const failureInfo = {
+          index: globalIndex + 1,
+          employee: `${employee.firstName} ${employee.lastName}`,
+          userName: employee.userName,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+        
+        results.failed.push(failureInfo);
+        
+        if (!continueOnError) {
+          throw error;
+        }
+      }
+    });
+
+    // Wait for batch to complete before proceeding
+    if (continueOnError) {
+      await Promise.allSettled(batchPromises);
+    } else {
+      await Promise.all(batchPromises);
+    }
+  }
+
+  return results;
+}
+
+/**
  * Update an existing employee
  */
 export async function updateEmployee(id: number, employee: UpdateEmployeeRequest, useValidation: boolean = true): Promise<void> {
@@ -369,6 +456,68 @@ export async function updateEmployee(id: number, employee: UpdateEmployeeRequest
     const errorData = await response.text();
     throw new Error(`Failed to update employee ${id}: ${response.status} ${response.statusText} - ${errorData}`);
   }
+}
+
+/**
+ * Update multiple employees in bulk
+ */
+export async function updateEmployeesBulk(
+  updates: Array<{ id: number; data: UpdateEmployeeRequest }>,
+  options: {
+    continueOnError?: boolean;
+    useValidation?: boolean;
+    batchSize?: number;
+  } = {}
+): Promise<{
+  successful: Array<{ id: number; employeeName?: string }>;
+  failed: Array<{ id: number; employeeName?: string; error: string }>;
+  total: number;
+}> {
+  const { continueOnError = true, useValidation = true, batchSize = 10 } = options;
+  
+  const results = {
+    successful: [] as Array<{ id: number; employeeName?: string }>,
+    failed: [] as Array<{ id: number; employeeName?: string; error: string }>,
+    total: updates.length
+  };
+
+  // Process updates in batches
+  for (let i = 0; i < updates.length; i += batchSize) {
+    const batch = updates.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async ({ id, data }) => {
+      try {
+        await updateEmployee(id, data, useValidation);
+        
+        const employeeName = data.firstName && data.lastName ? 
+          `${data.firstName} ${data.lastName}` : undefined;
+        
+        results.successful.push({ id, employeeName });
+        
+      } catch (error) {
+        const employeeName = data.firstName && data.lastName ? 
+          `${data.firstName} ${data.lastName}` : undefined;
+        
+        results.failed.push({
+          id,
+          employeeName,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        
+        if (!continueOnError) {
+          throw error;
+        }
+      }
+    });
+
+    if (continueOnError) {
+      await Promise.allSettled(batchPromises);
+    } else {
+      await Promise.all(batchPromises);
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -823,11 +972,168 @@ export async function deleteCustomFieldAttachment(employeeId: number, customProp
 }
 
 // =============================================================================
-// UTILITY FUNCTIONS
+// ADVANCED SEARCH AND FILTERING FUNCTIONS
 // =============================================================================
 
 /**
- * Batch fetch employees by IDs
+ * Search employees with advanced filtering options
+ */
+export async function searchEmployees(searchCriteria: {
+  query?: string;
+  departmentIds?: number[];
+  employeeGroupIds?: number[];
+  skillIds?: number[];
+  jobTitles?: string[];
+  employeeTypeIds?: number[];
+  supervisorIds?: number[];
+  hiredAfter?: string;
+  hiredBefore?: string;
+  isActive?: boolean;
+  hasSkills?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<PaginatedResponse<Employee>> {
+  // For advanced search, we'll use the basic getEmployees function
+  // and then filter the results as needed
+  const baseParams: EmployeeQueryParams = {
+    limit: searchCriteria.limit || 50,
+    offset: searchCriteria.offset || 0,
+    searchQuery: searchCriteria.query
+  };
+
+  if (searchCriteria.hiredAfter) {
+    baseParams.createdFrom = searchCriteria.hiredAfter;
+  }
+  if (searchCriteria.hiredBefore) {
+    baseParams.createdTo = searchCriteria.hiredBefore;
+  }
+
+  let employees;
+  if (searchCriteria.isActive === false) {
+    employees = await getDeactivatedEmployees(baseParams);
+  } else {
+    employees = await getEmployees(baseParams);
+  }
+
+  // Client-side filtering for advanced criteria
+  let filteredData = employees.data;
+
+  if (searchCriteria.departmentIds && searchCriteria.departmentIds.length > 0) {
+    filteredData = filteredData.filter(emp => 
+      emp.departments && emp.departments.some(deptId => searchCriteria.departmentIds!.includes(deptId))
+    );
+  }
+
+  if (searchCriteria.employeeGroupIds && searchCriteria.employeeGroupIds.length > 0) {
+    filteredData = filteredData.filter(emp => 
+      emp.employeeGroups && emp.employeeGroups.some(groupId => searchCriteria.employeeGroupIds!.includes(groupId))
+    );
+  }
+
+  if (searchCriteria.skillIds && searchCriteria.skillIds.length > 0) {
+    filteredData = filteredData.filter(emp => 
+      emp.skillIds && emp.skillIds.some(skillId => searchCriteria.skillIds!.includes(skillId))
+    );
+  }
+
+  if (searchCriteria.jobTitles && searchCriteria.jobTitles.length > 0) {
+    filteredData = filteredData.filter(emp => 
+      emp.jobTitle && searchCriteria.jobTitles!.some(title => 
+        emp.jobTitle!.toLowerCase().includes(title.toLowerCase())
+      )
+    );
+  }
+
+  if (searchCriteria.employeeTypeIds && searchCriteria.employeeTypeIds.length > 0) {
+    filteredData = filteredData.filter(emp => 
+      emp.employeeTypeId && searchCriteria.employeeTypeIds!.includes(emp.employeeTypeId)
+    );
+  }
+
+  if (searchCriteria.supervisorIds && searchCriteria.supervisorIds.length > 0) {
+    filteredData = filteredData.filter(emp => 
+      emp.supervisorEmployeeId && searchCriteria.supervisorIds!.includes(emp.supervisorEmployeeId)
+    );
+  }
+
+  if (searchCriteria.hasSkills !== undefined) {
+    filteredData = filteredData.filter(emp => 
+      searchCriteria.hasSkills ? (emp.skillIds && emp.skillIds.length > 0) : (!emp.skillIds || emp.skillIds.length === 0)
+    );
+  }
+
+  return {
+    paging: {
+      ...employees.paging,
+      total: filteredData.length
+    },
+    data: filteredData
+  };
+}
+
+/**
+ * Get employees by department with detailed information
+ */
+export async function getEmployeesByDepartment(departmentId: number, params: EmployeeQueryParams = {}): Promise<PaginatedResponse<Employee>> {
+  const employees = await getEmployees(params);
+  
+  const filteredData = employees.data.filter(emp => 
+    emp.departments && emp.departments.includes(departmentId)
+  );
+
+  return {
+    paging: {
+      ...employees.paging,
+      total: filteredData.length
+    },
+    data: filteredData
+  };
+}
+
+/**
+ * Get employees by job title
+ */
+export async function getEmployeesByJobTitle(jobTitle: string, params: EmployeeQueryParams = {}): Promise<PaginatedResponse<Employee>> {
+  const employees = await getEmployees(params);
+  
+  const filteredData = employees.data.filter(emp => 
+    emp.jobTitle && emp.jobTitle.toLowerCase().includes(jobTitle.toLowerCase())
+  );
+
+  return {
+    paging: {
+      ...employees.paging,
+      total: filteredData.length
+    },
+    data: filteredData
+  };
+}
+
+/**
+ * Get employees by skill
+ */
+export async function getEmployeesBySkill(skillId: number, params: EmployeeQueryParams = {}): Promise<PaginatedResponse<Employee>> {
+  const employees = await getEmployees(params);
+  
+  const filteredData = employees.data.filter(emp => 
+    emp.skillIds && emp.skillIds.includes(skillId)
+  );
+
+  return {
+    paging: {
+      ...employees.paging,
+      total: filteredData.length
+    },
+    data: filteredData
+  };
+}
+
+// =============================================================================
+// BATCH AND UTILITY FUNCTIONS
+// =============================================================================
+
+/**
+ * Batch fetch employees by IDs with enhanced error handling
  */
 export async function getEmployeesByIds(ids: number[]): Promise<Map<number, Employee>> {
   const employeeMap = new Map<number, Employee>();
@@ -858,7 +1164,7 @@ export async function getEmployeesByIds(ids: number[]): Promise<Map<number, Empl
 }
 
 /**
- * Batch fetch departments by IDs
+ * Batch fetch departments by IDs with enhanced error handling
  */
 export async function getDepartmentsByIds(ids: number[]): Promise<Map<number, Department>> {
   const departmentMap = new Map<number, Department>();
@@ -877,6 +1183,50 @@ export async function getDepartmentsByIds(ids: number[]): Promise<Map<number, De
   }
 
   return departmentMap;
+}
+
+/**
+ * Batch fetch employee groups by IDs
+ */
+export async function getEmployeeGroupsByIds(ids: number[]): Promise<Map<number, EmployeeGroup>> {
+  const groupMap = new Map<number, EmployeeGroup>();
+  
+  if (ids.length === 0) return groupMap;
+
+  try {
+    const response = await getEmployeeGroups({ limit: 50 });
+    response.data.forEach((group) => {
+      if (ids.includes(group.id)) {
+        groupMap.set(group.id, group);
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching employee groups by IDs:', error);
+  }
+
+  return groupMap;
+}
+
+/**
+ * Batch fetch skills by IDs
+ */
+export async function getSkillsByIds(ids: number[]): Promise<Map<number, Skill>> {
+  const skillMap = new Map<number, Skill>();
+  
+  if (ids.length === 0) return skillMap;
+
+  try {
+    const skills = await getSkills();
+    skills.forEach((skill) => {
+      if (ids.includes(skill.skillId)) {
+        skillMap.set(skill.skillId, skill);
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching skills by IDs:', error);
+  }
+
+  return skillMap;
 }
 
 /**
@@ -919,3 +1269,262 @@ export async function resolveDepartmentNames(departmentIds: number[]): Promise<M
 
   return nameMap;
 }
+
+/**
+ * Resolve employee group names from IDs
+ */
+export async function resolveEmployeeGroupNames(groupIds: number[]): Promise<Map<number, string>> {
+  const nameMap = new Map<number, string>();
+  
+  if (groupIds.length === 0) return nameMap;
+
+  try {
+    const groupMap = await getEmployeeGroupsByIds(groupIds);
+    groupMap.forEach((group, id) => {
+      nameMap.set(id, group.name);
+    });
+  } catch (error) {
+    console.error('Error resolving employee group names:', error);
+  }
+
+  return nameMap;
+}
+
+/**
+ * Resolve skill names from IDs
+ */
+export async function resolveSkillNames(skillIds: number[]): Promise<Map<number, string>> {
+  const nameMap = new Map<number, string>();
+  
+  if (skillIds.length === 0) return nameMap;
+
+  try {
+    const skillMap = await getSkillsByIds(skillIds);
+    skillMap.forEach((skill, id) => {
+      nameMap.set(id, skill.name);
+    });
+  } catch (error) {
+    console.error('Error resolving skill names:', error);
+  }
+
+  return nameMap;
+}
+
+// =============================================================================
+// DATA VALIDATION AND HELPER FUNCTIONS
+// =============================================================================
+
+/**
+ * Validate employee data before creation/update
+ */
+export function validateEmployeeData(employee: Partial<CreateEmployeeRequest | UpdateEmployeeRequest>): {
+  isValid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+
+  // Check required fields for creation
+  if ('firstName' in employee && 'lastName' in employee && 'userName' in employee) {
+    if (!employee.firstName || employee.firstName.trim().length === 0) {
+      errors.push('First name is required');
+    }
+    if (!employee.lastName || employee.lastName.trim().length === 0) {
+      errors.push('Last name is required');
+    }
+    if (!employee.userName || employee.userName.trim().length === 0) {
+      errors.push('Username is required');
+    }
+    if (employee.userName && !isValidEmail(employee.userName)) {
+      errors.push('Username must be a valid email address');
+    }
+  }
+
+  // Validate email format
+  if (employee.email && !isValidEmail(employee.email)) {
+    errors.push('Email must be a valid email address');
+  }
+
+  // Validate date formats
+  if (employee.birthDate && !isValidDate(employee.birthDate)) {
+    errors.push('Birth date must be in YYYY-MM-DD format');
+  }
+  if (employee.hiredFrom && !isValidDate(employee.hiredFrom)) {
+    errors.push('Hire date must be in YYYY-MM-DD format');
+  }
+
+  // Validate gender
+  if (employee.gender && !['Male', 'Female'].includes(employee.gender)) {
+    errors.push('Gender must be either "Male" or "Female"');
+  }
+
+  // Validate phone numbers (basic validation)
+  if (employee.cellPhone && employee.cellPhone.length > 0 && !/^[\d\s\-\+\(\)]+$/.test(employee.cellPhone)) {
+    errors.push('Cell phone must contain only numbers, spaces, hyphens, plus signs, and parentheses');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validate department data
+ */
+export function validateDepartmentData(department: CreateDepartmentRequest | UpdateDepartmentRequest): {
+  isValid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+
+  if (!department.name || department.name.trim().length === 0) {
+    errors.push('Department name is required');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validate skill data
+ */
+export function validateSkillData(skill: CreateSkillRequest | UpdateSkillRequest): {
+  isValid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+
+  if (!skill.name || skill.name.trim().length === 0) {
+    errors.push('Skill name is required');
+  }
+
+  if (typeof skill.isTimeLimited !== 'boolean') {
+    errors.push('isTimeLimited must be a boolean value');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Helper function to validate email format
+ */
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Helper function to validate date format (YYYY-MM-DD)
+ */
+function isValidDate(dateString: string): boolean {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(dateString)) return false;
+  
+  const date = new Date(dateString);
+  return date instanceof Date && !isNaN(date.getTime());
+}
+
+/**
+ * Helper function to sanitize employee data
+ */
+export function sanitizeEmployeeData(employee: Partial<CreateEmployeeRequest | UpdateEmployeeRequest>): Partial<CreateEmployeeRequest | UpdateEmployeeRequest> {
+  const sanitized = { ...employee };
+
+  // Trim string fields
+  if (sanitized.firstName) sanitized.firstName = sanitized.firstName.trim();
+  if (sanitized.lastName) sanitized.lastName = sanitized.lastName.trim();
+  if (sanitized.userName) sanitized.userName = sanitized.userName.trim().toLowerCase();
+  if (sanitized.email) sanitized.email = sanitized.email.trim().toLowerCase();
+  if (sanitized.jobTitle) sanitized.jobTitle = sanitized.jobTitle.trim();
+  if (sanitized.street1) sanitized.street1 = sanitized.street1.trim();
+  if (sanitized.street2) sanitized.street2 = sanitized.street2.trim();
+  if (sanitized.city) sanitized.city = sanitized.city.trim();
+  if (sanitized.zip) sanitized.zip = sanitized.zip.trim();
+
+  // Remove empty arrays
+  if (sanitized.departments && sanitized.departments.length === 0) delete sanitized.departments;
+  if (sanitized.employeeGroups && sanitized.employeeGroups.length === 0) delete sanitized.employeeGroups;
+  if (sanitized.skillIds && sanitized.skillIds.length === 0) delete sanitized.skillIds;
+
+  return sanitized;
+}
+
+// =============================================================================
+// EXPORT ALL FUNCTIONS
+// =============================================================================
+
+export {
+  // Core employee management
+  getEmployees,
+  getDeactivatedEmployees,
+  getEmployeeById,
+  createEmployee,
+  createEmployeesBulk,
+  updateEmployee,
+  updateEmployeesBulk,
+  deactivateEmployee,
+  reactivateEmployee,
+  
+  // Employee support functions
+  getSupervisors,
+  getEmployeeFieldDefinitions,
+  getEmployeeHistory,
+  
+  // Department management
+  getDepartments,
+  getDepartmentById,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+  
+  // Employee groups
+  getEmployeeGroups,
+  getEmployeeGroupById,
+  createEmployeeGroup,
+  updateEmployeeGroup,
+  deleteEmployeeGroup,
+  
+  // Skills management
+  getSkills,
+  createSkill,
+  updateSkill,
+  deleteSkill,
+  
+  // Employee types
+  getEmployeeTypes,
+  
+  // Custom field attachments
+  getCustomFieldAttachment,
+  createCustomFieldAttachment,
+  updateCustomFieldAttachment,
+  deleteCustomFieldAttachment,
+  
+  // Advanced search and filtering
+  searchEmployees,
+  getEmployeesByDepartment,
+  getEmployeesByJobTitle,
+  getEmployeesBySkill,
+  
+  // Batch operations
+  getEmployeesByIds,
+  getDepartmentsByIds,
+  getEmployeeGroupsByIds,
+  getSkillsByIds,
+  
+  // Name resolution
+  resolveEmployeeNames,
+  resolveDepartmentNames,
+  resolveEmployeeGroupNames,
+  resolveSkillNames,
+  
+  // Validation and sanitization
+  validateEmployeeData,
+  validateDepartmentData,
+  validateSkillData,
+  sanitizeEmployeeData
+};

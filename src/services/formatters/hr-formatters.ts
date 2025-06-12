@@ -1,5 +1,5 @@
 // src/services/formatters/hr-formatters.ts
-// HR Domain Formatters - Employee & Department data formatting
+// HR Domain Formatters - Employee & Department data formatting with bulk operations support
 
 import type { 
   Employee,
@@ -12,6 +12,9 @@ import type {
   EmployeeFieldDefinitions,
   PaginatedResponse,
   EmployeeQueryParams,
+  BulkEmployeeResult,
+  CreateEmployeeRequest,
+  UpdateEmployeeRequest
 } from '../api/hr-api';
 
 // =============================================================================
@@ -112,6 +115,7 @@ function getOperationEmoji(operation: string): string {
     case 'reactivate': return '🔄';
     case 'assign': return '📋';
     case 'approve': return '✅';
+    case 'bulk': return '📦';
     default: return '🔧';
   }
 }
@@ -394,6 +398,265 @@ export function formatEmployeeOperationResult(operation: string, data: any): str
   content += `💡 **Next Steps:** Employee record is now updated. Consider updating related systems if needed.`;
   
   return content;
+}
+
+// =============================================================================
+// BULK OPERATIONS FORMATTERS
+// =============================================================================
+
+/**
+ * Format bulk employee creation results with detailed analysis
+ */
+export function formatBulkEmployeeCreationResult(results: BulkEmployeeResult): string {
+  const emoji = getOperationEmoji('bulk');
+  const successRate = Math.round((results.successful.length / results.total) * 100);
+  
+  let content = `${emoji} **Bulk Employee Creation Complete**\n\n`;
+  
+  // Summary statistics
+  content += `📊 **Results Summary**\n`;
+  content += `   ✅ Successful: ${results.successful.length} / ${results.total} (${successRate}%)\n`;
+  content += `   ❌ Failed: ${results.failed.length} / ${results.total} (${100 - successRate}%)\n`;
+  content += `   📅 Completed: ${new Date().toLocaleString()}\n\n`;
+
+  // Success details
+  if (results.successful.length > 0) {
+    content += `✅ **Successfully Created Employees**\n`;
+    results.successful.forEach((success, index) => {
+      content += `   ${index + 1}. **${success.employee}** (ID: ${success.id})\n`;
+      content += `      📧 ${success.userName}\n`;
+    });
+    content += '\n';
+  }
+
+  // Failure details
+  if (results.failed.length > 0) {
+    content += `❌ **Failed Employee Creations**\n`;
+    results.failed.forEach((failure, index) => {
+      content += `   ${index + 1}. **${failure.employee}** (${failure.userName})\n`;
+      content += `      🚨 Error: ${truncateText(failure.error, 80)}\n`;
+    });
+    content += '\n';
+  }
+
+  // Error analysis
+  if (results.failed.length > 0) {
+    const errorCategories: { [key: string]: number } = {};
+    results.failed.forEach(failure => {
+      const error = failure.error.toLowerCase();
+      if (error.includes('email') || error.includes('username')) {
+        errorCategories['Email/Username Issues'] = (errorCategories['Email/Username Issues'] || 0) + 1;
+      } else if (error.includes('department')) {
+        errorCategories['Department Issues'] = (errorCategories['Department Issues'] || 0) + 1;
+      } else if (error.includes('required') || error.includes('missing')) {
+        errorCategories['Missing Required Fields'] = (errorCategories['Missing Required Fields'] || 0) + 1;
+      } else if (error.includes('validation')) {
+        errorCategories['Validation Errors'] = (errorCategories['Validation Errors'] || 0) + 1;
+      } else {
+        errorCategories['Other Errors'] = (errorCategories['Other Errors'] || 0) + 1;
+      }
+    });
+
+    content += `📋 **Error Analysis**\n`;
+    Object.keys(errorCategories).forEach(category => {
+      content += `   • ${category}: ${errorCategories[category]} cases\n`;
+    });
+    content += '\n';
+  }
+
+  // Recommendations
+  content += `💡 **Recommendations**\n`;
+  if (results.failed.length > 0) {
+    content += `   • Review failed entries and correct validation errors\n`;
+    content += `   • Verify department IDs exist using \`get-departments\`\n`;
+    content += `   • Ensure all email addresses are unique and valid\n`;
+    content += `   • Check required fields are populated\n`;
+  }
+  if (results.successful.length > 0) {
+    content += `   • ${results.successful.length} employees are ready for shift scheduling\n`;
+    content += `   • Consider setting up supervisor relationships\n`;
+    content += `   • Assign skills and employee groups as needed\n`;
+  }
+
+  return content;
+}
+
+/**
+ * Format bulk employee update results
+ */
+export function formatBulkEmployeeUpdateResult(results: {
+  successful: Array<{ id: number; employeeName?: string }>;
+  failed: Array<{ id: number; employeeName?: string; error: string }>;
+  total: number;
+}): string {
+  const emoji = getOperationEmoji('bulk');
+  const successRate = Math.round((results.successful.length / results.total) * 100);
+  
+  let content = `${emoji} **Bulk Employee Update Complete**\n\n`;
+  
+  // Summary statistics
+  content += `📊 **Update Summary**\n`;
+  content += `   ✅ Successful: ${results.successful.length} / ${results.total} (${successRate}%)\n`;
+  content += `   ❌ Failed: ${results.failed.length} / ${results.total} (${100 - successRate}%)\n`;
+  content += `   📅 Completed: ${new Date().toLocaleString()}\n\n`;
+
+  // Success details
+  if (results.successful.length > 0) {
+    content += `✅ **Successfully Updated Employees**\n`;
+    results.successful.forEach((success, index) => {
+      content += `   ${index + 1}. ${success.employeeName || 'Employee'} (ID: ${success.id})\n`;
+    });
+    content += '\n';
+  }
+
+  // Failure details
+  if (results.failed.length > 0) {
+    content += `❌ **Failed Employee Updates**\n`;
+    results.failed.forEach((failure, index) => {
+      content += `   ${index + 1}. ${failure.employeeName || 'Employee'} (ID: ${failure.id})\n`;
+      content += `      🚨 Error: ${truncateText(failure.error, 80)}\n`;
+    });
+    content += '\n';
+  }
+
+  return content + `💡 **Next Steps:** Review any failed updates and retry with corrected data if needed.`;
+}
+
+/**
+ * Format employee creation template with examples and field information
+ */
+export function formatEmployeeCreationTemplate(options: {
+  includeExamples: boolean;
+  includeOptionalFields: boolean;
+  fieldDefinitions?: any;
+}): string {
+  const { includeExamples, includeOptionalFields, fieldDefinitions } = options;
+  
+  let content = `📋 **Employee Creation Template**\n\n`;
+  
+  // Required fields section
+  content += `✅ **Required Fields** (Must be provided for all employees)\n`;
+  content += `\`\`\`json\n`;
+  content += `{\n`;
+  content += `  "firstName": ${includeExamples ? '"Sarah"' : '"string - Employee first name"'},\n`;
+  content += `  "lastName": ${includeExamples ? '"Johnson"' : '"string - Employee last name"'},\n`;
+  content += `  "userName": ${includeExamples ? '"sarah.johnson@company.com"' : '"string - Must be email address"'},\n`;
+  content += `  "departments": ${includeExamples ? '[6324, 4967]' : '[number] - Array of department IDs'}\n`;
+  
+  if (includeOptionalFields) {
+    content += `,\n\n  // Contact Information (Optional)\n`;
+    content += `  "email": ${includeExamples ? '"sarah.johnson@company.com"' : '"string - Primary email"'},\n`;
+    content += `  "cellPhone": ${includeExamples ? '"555-123-4567"' : '"string - Cell phone number"'},\n`;
+    content += `  "cellPhoneCountryCode": ${includeExamples ? '"US"' : '"string - ISO country code"'},\n`;
+    content += `  "phone": ${includeExamples ? '"555-987-6543"' : '"string - Landline phone"'},\n`;
+    content += `  "phoneCountryCode": ${includeExamples ? '"US"' : '"string - ISO country code"'},\n\n`;
+    
+    content += `  // Address Information (Optional)\n`;
+    content += `  "street1": ${includeExamples ? '"123 Main Street"' : '"string - Primary address"'},\n`;
+    content += `  "street2": ${includeExamples ? '"Apt 4B"' : '"string - Secondary address"'},\n`;
+    content += `  "city": ${includeExamples ? '"New York"' : '"string - City name"'},\n`;
+    content += `  "zip": ${includeExamples ? '"10001"' : '"string - Postal code"'},\n\n`;
+    
+    content += `  // Employment Details (Optional)\n`;
+    content += `  "jobTitle": ${includeExamples ? '"Kitchen Manager"' : '"string - Job title"'},\n`;
+    content += `  "employeeTypeId": ${includeExamples ? '71287' : 'number - Employee type (71285=Intern, 71286=Part-time, 71287=Full-time)'},\n`;
+    content += `  "hiredFrom": ${includeExamples ? '"2025-06-01"' : '"string - Hire date (YYYY-MM-DD)"'},\n`;
+    content += `  "salaryIdentifier": ${includeExamples ? '"EMP001"' : '"string - Payroll identifier"'},\n\n`;
+    
+    content += `  // Organization (Optional)\n`;
+    content += `  "primaryDepartmentId": ${includeExamples ? '6324' : 'number - Primary department ID'},\n`;
+    content += `  "employeeGroups": ${includeExamples ? '[9663, 8987]' : '[number] - Employee group IDs'},\n`;
+    content += `  "skillIds": ${includeExamples ? '[1, 3, 7]' : '[number] - Skill IDs'},\n`;
+    content += `  "supervisorId": ${includeExamples ? '451874' : 'number - Supervisor employee ID'},\n`;
+    content += `  "isSupervisor": ${includeExamples ? 'false' : 'boolean - Is this employee a supervisor'},\n\n`;
+    
+    content += `  // Personal Information (Optional - Use with caution)\n`;
+    content += `  "birthDate": ${includeExamples ? '"1990-05-15"' : '"string - Birth date (YYYY-MM-DD)"'},\n`;
+    content += `  "gender": ${includeExamples ? '"Female"' : '"Male" | "Female"'},\n`;
+    content += `  "ssn": ${includeExamples ? '"123-45-6789"' : '"string - Social security number"'},\n\n`;
+    
+    content += `  // Financial Information (Optional)\n`;
+    content += `  "bankAccount": {\n`;
+    content += `    "registrationNumber": ${includeExamples ? '"123456789"' : '"string - Bank routing number"'},\n`;
+    content += `    "accountNumber": ${includeExamples ? '"987654321"' : '"string - Account number"'}\n`;
+    content += `  }\n`;
+  }
+  
+  content += `}\n`;
+  content += `\`\`\`\n\n`;
+
+  // Field validation notes
+  content += `🔍 **Field Validation Notes**\n`;
+  content += `• **userName** and **email**: Must be valid email addresses\n`;
+  content += `• **departments**: Use \`get-departments\` to find valid department IDs\n`;
+  content += `• **employeeGroups**: Use \`get-employee-groups\` to find valid group IDs\n`;
+  content += `• **skillIds**: Use \`get-skills\` to find valid skill IDs\n`;
+  content += `• **supervisorId**: Use \`get-supervisors\` to find valid supervisor IDs\n`;
+  content += `• **Date fields**: Must be in YYYY-MM-DD format\n`;
+  content += `• **Country codes**: Use ISO 3155 alpha-2 codes (US, DK, UK, etc.)\n\n`;
+
+  // Bulk creation example
+  if (includeExamples) {
+    content += `📦 **Bulk Creation Example**\n`;
+    content += `\`\`\`json\n`;
+    content += `{\n`;
+    content += `  "employees": [\n`;
+    content += `    {\n`;
+    content += `      "firstName": "John",\n`;
+    content += `      "lastName": "Smith",\n`;
+    content += `      "userName": "john.smith@company.com",\n`;
+    content += `      "departments": [6324],\n`;
+    content += `      "email": "john.smith@company.com",\n`;
+    content += `      "jobTitle": "Server",\n`;
+    content += `      "employeeTypeId": 71287\n`;
+    content += `    },\n`;
+    content += `    {\n`;
+    content += `      "firstName": "Jane",\n`;
+    content += `      "lastName": "Doe",\n`;
+    content += `      "userName": "jane.doe@company.com",\n`;
+    content += `      "departments": [4967],\n`;
+    content += `      "email": "jane.doe@company.com",\n`;
+    content += `      "jobTitle": "Kitchen Manager",\n`;
+    content += `      "employeeTypeId": 71287,\n`;
+    content += `      "isSupervisor": true\n`;
+    content += `    }\n`;
+    content += `  ],\n`;
+    content += `  "continueOnError": true,\n`;
+    content += `  "validateDepartments": true\n`;
+    content += `}\n`;
+    content += `\`\`\`\n\n`;
+  }
+
+  // Employee type reference
+  content += `📊 **Employee Type Reference**\n`;
+  content += `• **71285** - Intern 🎓\n`;
+  content += `• **71286** - Part-time ⏰\n`;
+  content += `• **71287** - Full-time 💼\n\n`;
+
+  // Country code examples
+  content += `🌍 **Common Country Codes**\n`;
+  content += `• US (United States), DK (Denmark), UK (United Kingdom)\n`;
+  content += `• DE (Germany), FR (France), SE (Sweden), NO (Norway)\n`;
+  content += `• CA (Canada), AU (Australia), JP (Japan), etc.\n\n`;
+
+  // Schema information
+  if (fieldDefinitions) {
+    content += `📋 **Portal-Specific Information**\n`;
+    content += `• Portal ID: ${fieldDefinitions.portalId}\n`;
+    content += `• Total Available Fields: ${Object.keys(fieldDefinitions.properties || {}).length}\n`;
+    
+    const customFields = Object.keys(fieldDefinitions.properties || {}).filter(key => key.startsWith('custom_'));
+    if (customFields.length > 0) {
+      content += `• Custom Fields Available: ${customFields.length}\n`;
+    }
+    
+    if (fieldDefinitions.readOnly && fieldDefinitions.readOnly.length > 0) {
+      content += `• Read-Only Fields: ${fieldDefinitions.readOnly.join(', ')}\n`;
+    }
+    content += '\n';
+  }
+
+  return content + `💡 **Usage:** Use this template with \`create-employee\` for single creation or \`create-employees-bulk\` for multiple employees.`;
 }
 
 // =============================================================================
@@ -898,4 +1161,4 @@ function calculateAverageTenure(employees: Employee[]): number {
   }, 0);
   
   return Math.round(totalDays / employees.length);
-} 
+}

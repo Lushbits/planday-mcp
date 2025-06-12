@@ -180,7 +180,7 @@ export interface Skill {
   allEmployeeGroups: boolean;
 }
 
-// Shift History
+// Shift History (Fixed implementation)
 export interface ShiftHistoryRecord {
   modifiedAt: string;
   modifiedBy: {
@@ -188,6 +188,15 @@ export interface ShiftHistoryRecord {
     name: string;
   };
   changes: string[];
+}
+
+export interface ShiftHistoryResponse {
+  paging: {
+    offset: number;
+    limit: number;
+    total: number;
+  };
+  data: ShiftHistoryRecord[];
 }
 
 // Time & Cost
@@ -654,31 +663,164 @@ export async function getSkills(
 }
 
 // ================================
-// SHIFT HISTORY API (Read-only)
+// SHIFT HISTORY API (FIXED)
 // ================================
 
 /**
- * Get history for a specific shift
+ * Get history for a specific shift with proper error handling
+ * Official API: GET /scheduling/v1.0/shifts/{shiftId}/history
  */
 export async function getShiftHistory(
   shiftId: number,
-  filters?: { limit?: number; offset?: number }
-): Promise<{ data: ShiftHistoryRecord[]; paging: any }> {
-  let url = `https://openapi.planday.com/scheduling/v1.0/shifts/${shiftId}/history`;
-  const params = [];
-  
-  if (filters?.limit) params.push(`limit=${filters.limit}`);
-  if (filters?.offset) params.push(`offset=${filters.offset}`);
-  
-  if (params.length > 0) url += `?${params.join('&')}`;
-
-  const response = await makeAuthenticatedRequest(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch shift history: ${response.status} ${response.statusText}`);
+  filters?: { 
+    limit?: number; 
+    offset?: number;
+  }
+): Promise<ShiftHistoryResponse> {
+  // Validate shift ID
+  if (!shiftId || shiftId <= 0) {
+    throw new Error(`Invalid shift ID: ${shiftId}`);
   }
 
-  const data = await response.json();
-  return { data: data.data || [], paging: data.paging || {} };
+  // Build URL with proper parameter formatting
+  let url = `https://openapi.planday.com/scheduling/v1.0/shifts/${shiftId}/history`;
+  const params: string[] = [];
+  
+  // Add query parameters if provided - keeping exact case from API docs
+  if (filters?.offset !== undefined && filters.offset >= 0) {
+    params.push(`offset=${filters.offset}`);
+  }
+  
+  if (filters?.limit !== undefined && filters.limit > 0 && filters.limit <= 50) {
+    params.push(`limit=${filters.limit}`);
+  }
+  
+  if (params.length > 0) {
+    url += `?${params.join('&')}`;
+  }
+
+  console.log(`Fetching shift history from: ${url}`);
+
+  try {
+    const response = await makeAuthenticatedRequest(url);
+    
+    if (!response.ok) {
+      // Enhanced error handling for different status codes
+      switch (response.status) {
+        case 401:
+          throw new Error(`Unauthorized: Check your authentication credentials`);
+        case 403:
+          throw new Error(`Forbidden: Missing required scope 'shift:read' or insufficient permissions`);
+        case 404:
+          throw new Error(`Shift ${shiftId} not found or has no history records`);
+        case 429:
+          throw new Error(`Rate limit exceeded: Too many requests`);
+        case 500:
+          throw new Error(`Server error: Shift ${shiftId} may not exist or API is experiencing issues`);
+        default:
+          const errorText = await response.text().catch(() => 'Unknown error');
+          throw new Error(`Failed to fetch shift history (${response.status}): ${errorText}`);
+      }
+    }
+
+    const data = await response.json();
+    
+    // Validate response structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response format from shift history API');
+    }
+
+    return {
+      paging: data.paging || { offset: 0, limit: 0, total: 0 },
+      data: data.data || []
+    };
+
+  } catch (error) {
+    // Re-throw with more context
+    if (error instanceof Error) {
+      throw new Error(`Shift history fetch failed for shift ${shiftId}: ${error.message}`);
+    }
+    throw new Error(`Unknown error fetching shift history for shift ${shiftId}`);
+  }
+}
+
+/**
+ * Get complete shift history with automatic pagination
+ */
+export async function getAllShiftHistory(shiftId: number): Promise<ShiftHistoryRecord[]> {
+  let allHistory: ShiftHistoryRecord[] = [];
+  let offset = 0;
+  const limit = 50; // Maximum allowed per request
+  
+  try {
+    do {
+      const response = await getShiftHistory(shiftId, { limit, offset });
+      
+      if (response.data.length === 0) {
+        break; // No more data
+      }
+      
+      allHistory.push(...response.data);
+      offset += limit;
+      
+      console.log(`Loaded ${allHistory.length} of ${response.paging.total} history records`);
+      
+      // Safety check to prevent infinite loops
+      if (offset >= response.paging.total) {
+        break;
+      }
+      
+    } while (true);
+    
+    return allHistory;
+    
+  } catch (error) {
+    console.error(`Failed to fetch complete shift history for shift ${shiftId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Check if a shift exists before fetching its history
+ */
+export async function getShiftHistoryWithValidation(
+  shiftId: number,
+  filters?: { limit?: number; offset?: number }
+): Promise<ShiftHistoryResponse> {
+  try {
+    // First try to get the shift to validate it exists
+    const shiftResponse = await makeAuthenticatedRequest(
+      `https://openapi.planday.com/scheduling/v1.0/shifts/${shiftId}`
+    );
+    
+    if (!shiftResponse.ok) {
+      if (shiftResponse.status === 404) {
+        throw new Error(`Shift ${shiftId} does not exist`);
+      }
+      throw new Error(`Cannot validate shift ${shiftId}: ${shiftResponse.status}`);
+    }
+    
+    // If shift exists, fetch its history
+    return await getShiftHistory(shiftId, filters);
+    
+  } catch (error) {
+    console.error(`Shift history validation failed for shift ${shiftId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Utility function to format shift history for display
+ */
+export function formatShiftHistory(history: ShiftHistoryRecord[]): string {
+  if (history.length === 0) {
+    return 'No history records found for this shift.';
+  }
+
+  return history.map((record, index) => {
+    const changes = record.changes.map(change => `  • ${change}`).join('\n');
+    return `${index + 1}. ${record.modifiedAt} - ${record.modifiedBy.name}:\n${changes}`;
+  }).join('\n\n');
 }
 
 // ================================
@@ -839,3 +981,237 @@ export async function validateEmployeeForShift(
     };
   }
 }
+
+// ================================
+// ENHANCED SHIFT UTILITIES
+// ================================
+
+/**
+ * Get shift status options
+ */
+export async function getShiftStatuses(): Promise<{ data: { id: number; name: string }[] }> {
+  const url = 'https://openapi.planday.com/scheduling/v1.0/shifts/shiftstatus/all';
+  const response = await makeAuthenticatedRequest(url);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch shift statuses: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get shifts with enhanced data (employee names, position names, etc.)
+ */
+export async function getShiftsWithDetails(
+  startDate: string,
+  endDate: string,
+  filters?: {
+    departmentIds?: number[];
+    employeeGroupIds?: number[];
+    shiftTypeIds?: number[];
+    positionIds?: number[];
+    employeeIds?: number[];
+    shiftStatus?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<{
+  data: Array<Shift & {
+    employeeName?: string;
+    positionName?: string;
+    shiftTypeName?: string;
+  }>;
+  paging: any;
+}> {
+  // Get base shift data
+  const shiftsResponse = await getShifts(startDate, endDate, filters);
+  
+  if (shiftsResponse.data.length === 0) {
+    return shiftsResponse;
+  }
+
+  // Collect unique IDs for batch fetching
+  const employeeIds = [...new Set(shiftsResponse.data.map(s => s.employeeId).filter(Boolean))];
+  const positionIds = [...new Set(shiftsResponse.data.map(s => s.positionId).filter(Boolean))];
+  const shiftTypeIds = [...new Set(shiftsResponse.data.map(s => s.shiftTypeId).filter(Boolean))];
+
+  // Batch fetch related data
+  const [employeeMap, positionMap, shiftTypeMap] = await Promise.all([
+    getEmployeesByIds(employeeIds as number[]),
+    getPositionsByIds(positionIds as number[]),
+    getShiftTypesByIds(shiftTypeIds as number[])
+  ]);
+
+  // Enhance shift data with resolved names
+  const enhancedShifts = shiftsResponse.data.map(shift => ({
+    ...shift,
+    employeeName: shift.employeeId ? employeeMap.get(shift.employeeId) : undefined,
+    positionName: shift.positionId ? positionMap.get(shift.positionId)?.name : undefined,
+    shiftTypeName: shift.shiftTypeId ? shiftTypeMap.get(shift.shiftTypeId)?.name : undefined
+  }));
+
+  return {
+    data: enhancedShifts,
+    paging: shiftsResponse.paging
+  };
+}
+
+/**
+ * Helper function to get employee names by IDs
+ */
+async function getEmployeesByIds(ids: number[]): Promise<Map<number, string>> {
+  const employeeMap = new Map<number, string>();
+  
+  if (ids.length === 0) return employeeMap;
+
+  try {
+    // This would need to be imported from hr-api.ts
+    const { getEmployees } = await import('./hr-api');
+    const employeesResponse = await getEmployees({ limit: 50 });
+    
+    employeesResponse.data.forEach((employee: any) => {
+      if (ids.includes(employee.id)) {
+        employeeMap.set(employee.id, `${employee.firstName} ${employee.lastName}`);
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching employee names:', error);
+  }
+
+  return employeeMap;
+}
+
+/**
+ * Create a comprehensive shift with validation
+ */
+export async function createShiftWithValidation(
+  shiftData: CreateShiftRequest,
+  validateEmployee = true
+): Promise<{ shift: Shift; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Validate employee assignment if provided
+  if (validateEmployee && shiftData.employeeId) {
+    try {
+      // Create temporary shift for validation
+      const tempShift = await createShift({ ...shiftData, employeeId: undefined });
+      
+      // Validate employee can be assigned
+      const validation = await validateEmployeeForShift(shiftData.employeeId, tempShift.id);
+      
+      if (!validation.isValid) {
+        warnings.push(`Employee validation warning: ${validation.reason}`);
+        // Remove employee assignment but continue with shift creation
+        shiftData = { ...shiftData, employeeId: undefined };
+      } else {
+        // Assign employee to the shift
+        await assignShiftToEmployee(tempShift.id, shiftData.employeeId);
+      }
+      
+      return { shift: tempShift, warnings };
+    } catch (error) {
+      warnings.push(`Employee validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // Create shift without employee validation
+  const shift = await createShift(shiftData);
+  return { shift, warnings };
+}
+
+/**
+ * Get shift conflicts for an employee
+ */
+export async function getShiftConflicts(
+  employeeId: number,
+  date: string,
+  startTime: string,
+  endTime: string,
+  excludeShiftId?: number
+): Promise<Shift[]> {
+  try {
+    // Get all shifts for the employee on the specified date
+    const shiftsResponse = await getShifts(date, date, {
+      employeeIds: [employeeId],
+      limit: 50
+    });
+
+    // Filter for time conflicts
+    const conflicts = shiftsResponse.data.filter(shift => {
+      // Skip the shift we're excluding (for updates)
+      if (excludeShiftId && shift.id === excludeShiftId) return false;
+
+      // Check for time overlap
+      if (shift.startDateTime && shift.endDateTime) {
+        const shiftStart = new Date(`${shift.date}T${shift.startDateTime}`);
+        const shiftEnd = new Date(`${shift.date}T${shift.endDateTime}`);
+        const newStart = new Date(`${date}T${startTime}`);
+        const newEnd = new Date(`${date}T${endTime}`);
+
+        // Check for overlap
+        return (newStart < shiftEnd && newEnd > shiftStart);
+      }
+
+      return false;
+    });
+
+    return conflicts;
+  } catch (error) {
+    console.error(`Error checking shift conflicts for employee ${employeeId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get available employees for a shift based on requirements
+ */
+export async function getAvailableEmployeesForShift(
+  departmentId: number,
+  employeeGroupId: number,
+  date: string,
+  startTime?: string,
+  endTime?: string
+): Promise<Array<{ id: number; name: string; isAvailable: boolean; conflictReason?: string }>> {
+  try {
+    // This would need to be imported from hr-api.ts
+    const { getEmployees } = await import('./hr-api');
+    
+    // Get employees in the required department and group
+    const employeesResponse = await getEmployees({ limit: 50 });
+    const eligibleEmployees = employeesResponse.data.filter((emp: any) => 
+      emp.departments?.includes(departmentId) && 
+      emp.employeeGroups?.includes(employeeGroupId)
+    );
+
+    // Check availability for each employee
+    const availabilityPromises = eligibleEmployees.map(async (emp: any) => {
+      let isAvailable = true;
+      let conflictReason: string | undefined;
+
+      // Check for time conflicts if times are provided
+      if (startTime && endTime) {
+        const conflicts = await getShiftConflicts(emp.id, date, startTime, endTime);
+        if (conflicts.length > 0) {
+          isAvailable = false;
+          conflictReason = `Has ${conflicts.length} conflicting shift(s)`;
+        }
+      }
+
+      return {
+        id: emp.id,
+        name: `${emp.firstName} ${emp.lastName}`,
+        isAvailable,
+        conflictReason
+      };
+    });
+
+    return await Promise.all(availabilityPromises);
+  } catch (error) {
+    console.error('Error getting available employees:', error);
+    return [];
+  }
+}
+
+// All functions and types are already exported individually above
+// No need for a redundant export block at the end
